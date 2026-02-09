@@ -15,6 +15,8 @@ import {
   Spinner,
   Button,
   Switch,
+  Input,
+  Textarea,
 } from '@chakra-ui/react';
 
 interface Notification {
@@ -58,6 +60,37 @@ export default function AdminDashboardPage() {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>({});
   const [loading, setLoading] = useState(true);
   const [savingFlags, setSavingFlags] = useState(false);
+
+  // AI Moderation state
+  const [modTitle, setModTitle] = useState('');
+  const [modDescription, setModDescription] = useState('');
+  const [modLoading, setModLoading] = useState(false);
+  const [modResult, setModResult] = useState<{ approved: boolean; reason?: string; suggestions?: string[] } | null>(null);
+  const [modError, setModError] = useState('');
+
+  const handleModerate = async () => {
+    if (!modTitle || !modDescription) return;
+    setModLoading(true);
+    setModError('');
+    setModResult(null);
+    try {
+      const res = await fetch('/api/ai/admin/moderate-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: modTitle, description: modDescription }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setModError(data.error?.message || 'حدث خطأ');
+        return;
+      }
+      setModResult(data.data);
+    } catch {
+      setModError('فشل الاتصال بخدمة الذكاء الاصطناعي');
+    } finally {
+      setModLoading(false);
+    }
+  };
 
   const fetchOverview = useCallback(async () => {
     try {
@@ -355,6 +388,80 @@ export default function AdminDashboardPage() {
               </VStack>
             </Box>
           </SimpleGrid>
+
+          {/* AI Moderation Panel */}
+          <Box className="neon-card" p={6}>
+            <VStack align="stretch" gap={4}>
+              <Heading size="md" color="black">🤖 فحص المحتوى بالذكاء الاصطناعي</Heading>
+              <Text fontSize="sm" color="gray.600">
+                اختبر نظام فحص المحتوى على أي إعلان قبل الموافقة عليه
+              </Text>
+              <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+                <Box>
+                  <Text fontSize="sm" fontWeight="bold" mb={1}>عنوان المنتج</Text>
+                  <Input
+                    value={modTitle}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModTitle(e.target.value)}
+                    placeholder="أدخل عنوان المنتج..."
+                    borderColor="black"
+                  />
+                </Box>
+                <Box>
+                  <Text fontSize="sm" fontWeight="bold" mb={1}>وصف المنتج</Text>
+                  <Textarea
+                    value={modDescription}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setModDescription(e.target.value)}
+                    placeholder="أدخل وصف المنتج..."
+                    borderColor="black"
+                    rows={2}
+                  />
+                </Box>
+              </SimpleGrid>
+              <Button
+                bg="black"
+                color="white"
+                _hover={{ bg: 'gray.800' }}
+                onClick={handleModerate}
+                loading={modLoading}
+                disabled={!modTitle || !modDescription}
+                maxW="300px"
+              >
+                🔍 فحص بالذكاء الاصطناعي
+              </Button>
+              {modError && (
+                <Box p={3} bg="red.50" borderRadius="md" borderWidth={1} borderColor="red.200">
+                  <Text color="red.600" fontSize="sm">{modError}</Text>
+                </Box>
+              )}
+              {modResult && (
+                <Box
+                  p={4}
+                  borderRadius="lg"
+                  borderWidth={2}
+                  borderColor={modResult.approved ? 'green.300' : 'red.300'}
+                  bg={modResult.approved ? 'green.50' : 'red.50'}
+                >
+                  <HStack mb={2}>
+                    <Text fontSize="xl">{modResult.approved ? '✅' : '❌'}</Text>
+                    <Text fontWeight="bold" color={modResult.approved ? 'green.700' : 'red.700'}>
+                      {modResult.approved ? 'المحتوى مقبول' : 'المحتوى مرفوض'}
+                    </Text>
+                  </HStack>
+                  {modResult.reason && (
+                    <Text fontSize="sm" color="gray.700" mb={2}>السبب: {modResult.reason}</Text>
+                  )}
+                  {modResult.suggestions && modResult.suggestions.length > 0 && (
+                    <Box>
+                      <Text fontSize="sm" fontWeight="bold" color="gray.700" mb={1}>اقتراحات:</Text>
+                      {modResult.suggestions.map((s: string, i: number) => (
+                        <Text key={i} fontSize="sm" color="gray.600">• {s}</Text>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </VStack>
+          </Box>
 
           {/* Quick Action Cards */}
           {overview && (

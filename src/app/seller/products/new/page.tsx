@@ -76,6 +76,11 @@ export default function NewProductWizard() {
   const [tagInput, setTagInput] = useState('');
   const [slugError, setSlugError] = useState('');
 
+  // AI optimization state
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<{ title: string; description: string; tags: string[] } | null>(null);
+  const [aiError, setAiError] = useState('');
+
   const [data, setData] = useState<WizardData>({
     title: '',
     titleAr: '',
@@ -207,6 +212,33 @@ export default function NewProductWizard() {
       ...prev,
       tags: prev.tags.filter((t) => t !== tagToRemove),
     }));
+  };
+
+  const handleAiOptimize = async () => {
+    setAiLoading(true);
+    setAiError('');
+    setAiResult(null);
+    try {
+      const res = await fetch('/api/ai/seller/optimize-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title || data.titleAr,
+          description: data.description || data.descriptionAr,
+          category: categories.find((c) => c.id === data.categoryId)?.name,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.ok) {
+        setAiError(result.error?.message || 'حدث خطأ في خدمة الذكاء الاصطناعي');
+        return;
+      }
+      setAiResult(result.data);
+    } catch {
+      setAiError('فشل الاتصال بخدمة الذكاء الاصطناعي');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -528,6 +560,72 @@ export default function NewProductWizard() {
                     <Text fontSize="sm" color="gray.500" mt={1}>
                       {data.tags.length}/10 علامات
                     </Text>
+                  </Box>
+
+                  {/* AI Optimization Panel */}
+                  <Box p={4} borderWidth={2} borderColor="purple.200" borderRadius="lg" bg="purple.50">
+                    <Text fontWeight="bold" color="purple.700" mb={2}>✨ تحسين بالذكاء الاصطناعي</Text>
+                    <Text fontSize="sm" color="purple.600" mb={3}>
+                      دع الذكاء الاصطناعي يحسّن عنوان ووصف منتجك تلقائياً
+                    </Text>
+                    <Button
+                      size="sm"
+                      bg="purple.600"
+                      color="white"
+                      _hover={{ bg: 'purple.700' }}
+                      onClick={handleAiOptimize}
+                      loading={aiLoading}
+                      disabled={!data.title || !data.description}
+                    >
+                      🤖 تحسين الإعلان بالذكاء الاصطناعي
+                    </Button>
+                    {aiError && (
+                      <Text color="red.500" fontSize="sm" mt={2}>{aiError}</Text>
+                    )}
+                    {aiResult && (
+                      <Box mt={3} p={3} bg="white" borderRadius="md" borderWidth={1} borderColor="purple.200">
+                        <VStack align="stretch" gap={2}>
+                          <Box>
+                            <Text fontSize="sm" fontWeight="bold" color="purple.700">العنوان المحسّن:</Text>
+                            <Text fontSize="sm">{aiResult.title}</Text>
+                          </Box>
+                          <Box>
+                            <Text fontSize="sm" fontWeight="bold" color="purple.700">الوصف المحسّن:</Text>
+                            <Text fontSize="sm">{aiResult.description}</Text>
+                          </Box>
+                          {aiResult.tags.length > 0 && (
+                            <Box>
+                              <Text fontSize="sm" fontWeight="bold" color="purple.700">كلمات مفتاحية مقترحة:</Text>
+                              <HStack gap={1} mt={1} flexWrap="wrap">
+                                {aiResult.tags.map((t: string) => (
+                                  <Badge key={t} size="sm" colorPalette="purple">{t}</Badge>
+                                ))}
+                              </HStack>
+                            </Box>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            borderColor="purple.500"
+                            color="purple.600"
+                            _hover={{ bg: 'purple.100' }}
+                            onClick={() => {
+                              setData((prev) => ({
+                                ...prev,
+                                title: aiResult!.title,
+                                titleAr: aiResult!.title,
+                                description: aiResult!.description,
+                                descriptionAr: aiResult!.description,
+                                tags: [...new Set([...prev.tags, ...aiResult!.tags])].slice(0, 10),
+                              }));
+                              setAiResult(null);
+                            }}
+                          >
+                            ✅ تطبيق التحسينات
+                          </Button>
+                        </VStack>
+                      </Box>
+                    )}
                   </Box>
                 </VStack>
               </VStack>

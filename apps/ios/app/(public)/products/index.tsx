@@ -32,6 +32,8 @@ export default function ProductsList() {
   const [maxPrice, setMaxPrice] = useState('');
   const [condition, setCondition] = useState('');
   const [sort, setSort] = useState('relevance');
+  const [smartSearchLoading, setSmartSearchLoading] = useState(false);
+  const [smartSearchTerms, setSmartSearchTerms] = useState<string[]>([]);
 
   useEffect(() => {
     loadProducts();
@@ -64,6 +66,31 @@ export default function ProductsList() {
 
   const handleApplyFilters = () => {
     loadProducts(searchQuery);
+  };
+
+  const handleSmartSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setSmartSearchLoading(true);
+    setSmartSearchTerms([]);
+    try {
+      const { data } = await apiClient.post<any>('/api/ai/customer/smart-search', {
+        query: searchQuery.trim(),
+        language: 'ar',
+      });
+      if (data?.ok && data?.data) {
+        const { expandedQuery, suggestedFilters, relatedTerms } = data.data;
+        if (expandedQuery) setSearchQuery(expandedQuery);
+        if (suggestedFilters?.priceRange?.min) setMinPrice(String(suggestedFilters.priceRange.min));
+        if (suggestedFilters?.priceRange?.max) setMaxPrice(String(suggestedFilters.priceRange.max));
+        if (suggestedFilters?.conditions?.[0]) setCondition(suggestedFilters.conditions[0]);
+        if (relatedTerms?.length) setSmartSearchTerms(relatedTerms);
+        loadProducts(expandedQuery || searchQuery);
+      }
+    } catch {
+      // Silently handle error
+    } finally {
+      setSmartSearchLoading(false);
+    }
   };
 
   const conditionOptions = [
@@ -104,7 +131,32 @@ export default function ProductsList() {
           <TouchableOpacity style={styles.searchBtn} onPress={handleSearch}>
             <Text style={styles.searchBtnText}>🔍</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.searchBtn, { backgroundColor: '#7c3aed', width: 72 }]}
+            onPress={handleSmartSearch}
+            disabled={smartSearchLoading || !searchQuery.trim()}
+          >
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+              {smartSearchLoading ? '...' : '🤖 ذكي'}
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Smart Search Related Terms */}
+        {smartSearchTerms.length > 0 && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+            <Text style={{ color: '#7c3aed', fontSize: typography.small, fontWeight: '700' }}>مقترحات:</Text>
+            {smartSearchTerms.map((term) => (
+              <TouchableOpacity
+                key={term}
+                style={{ borderWidth: 1, borderColor: '#c4b5fd', borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 2 }}
+                onPress={() => { setSearchQuery(term); loadProducts(term); }}
+              >
+                <Text style={{ color: '#7c3aed', fontSize: typography.small }}>{term}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <TouchableOpacity onPress={() => setShowAdvanced(!showAdvanced)}>
           <Text style={styles.advancedToggle}>

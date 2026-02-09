@@ -44,6 +44,11 @@ function ProductsContent() {
   const [maxPrice, setMaxPrice] = useState('');
   const [condition, setCondition] = useState('');
   const [sort, setSort] = useState('relevance');
+  const [smartSearchLoading, setSmartSearchLoading] = useState(false);
+  const [smartSearchResult, setSmartSearchResult] = useState<{
+    expandedQuery: string;
+    relatedTerms: string[];
+  } | null>(null);
   const [aggregations, setAggregations] = useState<{
     conditions: { condition: string; count: number }[];
     priceRange: { min: number; max: number };
@@ -97,6 +102,33 @@ function ProductsContent() {
     fetchProducts(search);
   };
 
+  const handleSmartSearch = async () => {
+    if (!search.trim()) return;
+    setSmartSearchLoading(true);
+    setSmartSearchResult(null);
+    try {
+      const res = await fetch('/api/ai/customer/smart-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: search.trim(), language: 'ar' }),
+      });
+      const data = await res.json();
+      if (data.ok && data.data) {
+        setSmartSearchResult(data.data);
+        if (data.data.expandedQuery) setSearch(data.data.expandedQuery);
+        const sf = data.data.suggestedFilters;
+        if (sf?.priceRange?.min) setMinPrice(String(sf.priceRange.min));
+        if (sf?.priceRange?.max) setMaxPrice(String(sf.priceRange.max));
+        if (sf?.conditions?.[0]) setCondition(sf.conditions[0]);
+        fetchProducts(data.data.expandedQuery || search);
+      }
+    } catch (error) {
+      console.error('Smart search error:', error);
+    } finally {
+      setSmartSearchLoading(false);
+    }
+  };
+
   return (
     <Box minH="100vh" bg="white" py={10}>
       <Container maxW="7xl">
@@ -143,6 +175,18 @@ function ProductsContent() {
                   px={6}
                 >
                   {showAdvanced ? '▲ إخفاء' : '▼ بحث متقدم'}
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  bg="purple.600"
+                  color="white"
+                  _hover={{ bg: 'purple.700' }}
+                  px={6}
+                  onClick={handleSmartSearch}
+                  disabled={!search.trim() || smartSearchLoading}
+                >
+                  {smartSearchLoading ? <Spinner size="sm" /> : '🤖 بحث ذكي'}
                 </Button>
               </HStack>
 
@@ -252,6 +296,31 @@ function ProductsContent() {
                       </Button>
                     </HStack>
                   </VStack>
+                </Box>
+              )}
+
+              {/* Smart Search Suggestions */}
+              {smartSearchResult && smartSearchResult.relatedTerms.length > 0 && (
+                <Box p={3} borderWidth={1} borderColor="purple.200" borderRadius="lg" bg="purple.50">
+                  <HStack gap={2} flexWrap="wrap">
+                    <Text fontSize="sm" color="purple.700" fontWeight="bold">🤖 بحث مقترح:</Text>
+                    {smartSearchResult.relatedTerms.map((term: string) => (
+                      <Button
+                        key={term}
+                        size="xs"
+                        variant="outline"
+                        borderColor="purple.300"
+                        color="purple.600"
+                        _hover={{ bg: 'purple.100' }}
+                        onClick={() => {
+                          setSearch(term);
+                          fetchProducts(term);
+                        }}
+                      >
+                        {term}
+                      </Button>
+                    ))}
+                  </HStack>
                 </Box>
               )}
             </VStack>

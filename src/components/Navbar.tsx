@@ -50,6 +50,7 @@ export default function Navbar() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedQuery = useDebounce(localQuery, 300);
+  const [smartSearchLoading, setSmartSearchLoading] = useState(false);
   
   // Notifications state
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -184,6 +185,34 @@ export default function Navbar() {
       router.push(`/products?q=${encodeURIComponent(localQuery.trim())}`);
     }
   }, [localQuery, setQuery, router]);
+
+  const handleSmartSearch = useCallback(async () => {
+    if (!localQuery.trim()) return;
+    setSmartSearchLoading(true);
+    try {
+      const res = await fetch('/api/ai/customer/smart-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: localQuery.trim(), language: 'ar' }),
+      });
+      const result = await res.json();
+      if (result.ok && result.data) {
+        const params = new URLSearchParams();
+        if (result.data.expandedQuery) params.set('q', result.data.expandedQuery);
+        const sf = result.data.suggestedFilters;
+        if (sf?.priceRange?.min) params.set('minPrice', String(sf.priceRange.min));
+        if (sf?.priceRange?.max) params.set('maxPrice', String(sf.priceRange.max));
+        if (sf?.conditions?.[0]) params.set('condition', sf.conditions[0]);
+        setShowSuggestions(false);
+        setQuery(result.data.expandedQuery || localQuery);
+        router.push(`/products?${params.toString()}`);
+      }
+    } catch (err) {
+      console.error('Smart search error:', err);
+    } finally {
+      setSmartSearchLoading(false);
+    }
+  }, [localQuery, router, setQuery]);
 
   const handleSuggestionClick = (slug: string) => {
     setShowSuggestions(false);
@@ -630,6 +659,19 @@ export default function Navbar() {
                     }}
                   >
                     بحث متقدم
+                  </Button>
+                  <Button
+                    type="button"
+                    size={{ base: 'md', md: 'lg' }}
+                    bg="purple.600"
+                    color="white"
+                    _hover={{ bg: 'purple.700' }}
+                    px={{ base: 3, md: 6 }}
+                    onClick={handleSmartSearch}
+                    disabled={!localQuery.trim() || smartSearchLoading}
+                    display={{ base: 'none', md: 'flex' }}
+                  >
+                    {smartSearchLoading ? <Spinner size="sm" /> : '🤖 بحث ذكي'}
                   </Button>
                 </HStack>
               </form>

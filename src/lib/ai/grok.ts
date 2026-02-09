@@ -4,6 +4,39 @@ import crypto from 'crypto';
 const GROK_API_KEY = process.env.GROK_API_KEY!;
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
+// ============================================
+// AI RATE LIMITING (in-memory, per-process)
+// ============================================
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+/**
+ * Check AI-specific rate limit per key.
+ * Returns { allowed: true } or { allowed: false, retryAfterSeconds }.
+ */
+export function checkAiRateLimit(
+  key: string,
+  maxRequests: number,
+  windowMs: number = 3_600_000
+): { allowed: true } | { allowed: false; retryAfterSeconds: number } {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true };
+  }
+
+  if (bucket.count >= maxRequests) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000),
+    };
+  }
+
+  bucket.count++;
+  return { allowed: true };
+}
+
 export interface GrokMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
