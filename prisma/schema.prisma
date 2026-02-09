@@ -193,6 +193,7 @@ model User {
   auditLogs      AuditLog[]
   aiLogs         AiLog[]
   uploadSessions UploadSession[]
+  notifications  Notification[]
 
   @@index([email])
   @@index([role])
@@ -209,12 +210,14 @@ model SellerProfile {
   verificationStatus SellerVerificationStatus @default(PENDING)
   ratingAvg          Float                    @default(0)
   ratingCount        Int                      @default(0)
+  lowStockThreshold  Int                      @default(5)
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  products Product[]
-  orders   Order[]   @relation("SellerOrders")
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products   Product[]
+  orders     Order[]           @relation("SellerOrders")
+  commission SellerCommission?
 
   @@index([slug])
   @@index([verificationStatus])
@@ -235,9 +238,10 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children Category[] @relation("CategoryHierarchy")
-  products Product[]
+  parent     Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Category[]          @relation("CategoryHierarchy")
+  products   Product[]
+  commission CategoryCommission?
 
   @@index([parentId])
   @@index([sortOrder])
@@ -249,29 +253,31 @@ model Category {
 // ============================================
 
 model Product {
-  id           String           @id @default(cuid())
-  sellerId     String
-  title        String
-  titleAr      String?
-  slug         String           @unique
-  description  String           @db.Text
-  descriptionAr String?         @db.Text
-  condition    ProductCondition @default(NEW)
-  price        Decimal          @db.Decimal(12, 2)
-  currency     String           @default("SYP")
-  quantity     Int              @default(0)
-  status       ProductStatus    @default(DRAFT)
-  categoryId   String?
-  brand        String?
-  tags         Json             @default("[]")
-  ratingAvg    Float            @default(0)
-  ratingCount  Int              @default(0)
-  score        Float            @default(0)
-  manualBoost  Float            @default(0)
-  penaltyScore Float            @default(0)
-  pinned       Boolean          @default(false)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  sellerId       String
+  title          String
+  titleAr        String?
+  slug           String           @unique
+  description    String           @db.Text
+  descriptionAr  String?          @db.Text
+  condition      ProductCondition @default(NEW)
+  price          Decimal          @db.Decimal(12, 2)
+  currency       String           @default("SYP")
+  quantity       Int              @default(0)
+  status         ProductStatus    @default(DRAFT)
+  categoryId     String?
+  brand          String?
+  tags           Json             @default("[]")
+  ratingAvg      Float            @default(0)
+  ratingCount    Int              @default(0)
+  score          Float            @default(0)
+  manualBoost    Float            @default(0)
+  penaltyScore   Float            @default(0)
+  pinned         Boolean          @default(false)
+  viewCount      Int              @default(0)
+  addToCartCount Int              @default(0)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   seller     SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   category   Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -286,6 +292,7 @@ model Product {
   @@index([pinned, score, createdAt])
   @@index([price])
   @@index([condition])
+  @@index([viewCount])
 }
 
 model ProductImage {
@@ -446,6 +453,37 @@ model AdminSettings {
   updatedAt            DateTime @updatedAt
 }
 
+// ============================================
+// COMMISSION OVERRIDE MODELS
+// ============================================
+
+model CategoryCommission {
+  id             String   @id @default(cuid())
+  categoryId     String   @unique
+  commissionRate Decimal  @db.Decimal(5, 4)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId])
+}
+
+model SellerCommission {
+  id             String   @id @default(cuid())
+  sellerId       String   @unique
+  tier           String   @default("STANDARD")
+  commissionRate Decimal  @db.Decimal(5, 4)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
+  @@index([tier])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   adminId    String
@@ -500,4 +538,24 @@ model UploadSession {
 
   @@index([userId])
   @@index([status])
+}
+
+// ============================================
+// NOTIFICATION MODEL
+// ============================================
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }

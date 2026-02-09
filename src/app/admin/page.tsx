@@ -17,7 +17,8 @@ import {
   Input,
   Textarea,
   Stack,
-  Tabs,
+  Table,
+  NumberInput,
 } from '@chakra-ui/react';
 
 interface Overview {
@@ -48,6 +49,92 @@ interface Category {
   _count: { products: number };
 }
 
+interface AdminSettings {
+  freeMode: boolean;
+  globalCommissionRate: number;
+  rankingWeights: {
+    w_recency: number;
+    w_rating: number;
+    w_orders: number;
+    w_stock: number;
+    w_sellerRep: number;
+  };
+}
+
+interface CategoryCommission {
+  id: string;
+  categoryId: string;
+  commissionRate: number;
+  category: { id: string; name: string; nameAr?: string };
+}
+
+interface SellerCommission {
+  id: string;
+  sellerId: string;
+  tier: string;
+  commissionRate: number;
+  notes?: string;
+  seller: { id: string; storeName: string; user: { name: string; email: string } };
+}
+
+interface AuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  admin: { name: string; email: string };
+}
+
+interface ModerationData {
+  counts: {
+    pendingSellers: number;
+    pendingReviews: number;
+    pendingReports: number;
+    pendingProducts: number;
+    blockedProducts: number;
+    total: number;
+  };
+  pendingSellers: Array<{
+    id: string;
+    storeName: string;
+    slug: string;
+    createdAt: string;
+    user: { name: string; email: string };
+  }>;
+  pendingReviews: Array<{
+    id: string;
+    rating: number;
+    comment: string;
+    createdAt: string;
+    customer: { name: string };
+    product: { title: string; slug: string };
+  }>;
+  pendingProducts: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    price: number;
+    createdAt: string;
+    seller: { storeName: string };
+  }>;
+}
+
+interface RankingProduct {
+  id: string;
+  title: string;
+  slug: string;
+  price: number;
+  score: number;
+  pinned: boolean;
+  manualBoost: number;
+  penaltyScore: number;
+  ratingAvg: number;
+  seller: { storeName: string };
+  images: Array<{ url: string }>;
+}
+
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -55,6 +142,22 @@ export default function AdminDashboardPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Settings state
+  const [settings, setSettings] = useState<AdminSettings | null>(null);
+  const [categoryCommissions, setCategoryCommissions] = useState<CategoryCommission[]>([]);
+  const [sellerCommissions, setSellerCommissions] = useState<SellerCommission[]>([]);
+
+  // Moderation state
+  const [moderation, setModeration] = useState<ModerationData | null>(null);
+
+  // Ranking state
+  const [rankingProducts, setRankingProducts] = useState<RankingProduct[]>([]);
+  const [rankingStats, setRankingStats] = useState<{ pinnedCount: number; boostedCount: number; penalizedCount: number } | null>(null);
+
+  // Audit state
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditPage, setAuditPage] = useState(1);
 
   // New category form
   const [newCategory, setNewCategory] = useState({ name: '', description: '' });
@@ -65,6 +168,13 @@ export default function AdminDashboardPage() {
       fetchData();
     }
   }, [status]);
+
+  useEffect(() => {
+    if (activeTab === 'settings' && !settings) fetchSettings();
+    if (activeTab === 'moderation' && !moderation) fetchModeration();
+    if (activeTab === 'ranking' && rankingProducts.length === 0) fetchRanking();
+    if (activeTab === 'audit' && auditLogs.length === 0) fetchAuditLogs();
+  }, [activeTab]);
 
   const fetchData = async () => {
     try {
@@ -85,6 +195,62 @@ export default function AdminDashboardPage() {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const [settingsRes, catCommRes, sellerCommRes] = await Promise.all([
+        fetch('/api/admin/settings'),
+        fetch('/api/admin/commission/categories'),
+        fetch('/api/admin/commission/sellers'),
+      ]);
+      const settingsData = await settingsRes.json();
+      const catCommData = await catCommRes.json();
+      const sellerCommData = await sellerCommRes.json();
+
+      if (settingsData.success) setSettings({
+        freeMode: settingsData.data.freeMode,
+        globalCommissionRate: Number(settingsData.data.globalCommissionRate),
+        rankingWeights: settingsData.data.rankingWeights,
+      });
+      if (catCommData.success) setCategoryCommissions(catCommData.data);
+      if (sellerCommData.success) setSellerCommissions(sellerCommData.data);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
+  const fetchModeration = async () => {
+    try {
+      const res = await fetch('/api/admin/moderation');
+      const data = await res.json();
+      if (data.success) setModeration(data.data);
+    } catch (error) {
+      console.error('Error fetching moderation:', error);
+    }
+  };
+
+  const fetchRanking = async () => {
+    try {
+      const res = await fetch('/api/admin/ranking/products');
+      const data = await res.json();
+      if (data.success) {
+        setRankingProducts(data.data.products);
+        setRankingStats(data.data.stats);
+      }
+    } catch (error) {
+      console.error('Error fetching ranking:', error);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    try {
+      const res = await fetch(`/api/admin/audit?page=${auditPage}&limit=30`);
+      const data = await res.json();
+      if (data.success) setAuditLogs(data.data.logs);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
     }
   };
 
@@ -135,8 +301,107 @@ export default function AdminDashboardPage() {
       const data = await res.json();
       if (data.success) {
         alert(`تم تحديث ترتيب ${data.data.updatedCount} منتج`);
+        fetchRanking();
       } else {
         alert(data.error || 'حدث خطأ');
+      }
+    } catch {
+      alert('حدث خطأ غير متوقع');
+    }
+  };
+
+  const handleUpdateSettings = async (updates: Partial<AdminSettings>) => {
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSettings(prev => prev ? { ...prev, ...updates } : null);
+        alert('تم حفظ الإعدادات');
+      } else {
+        alert(data.error || 'حدث خطأ');
+      }
+    } catch {
+      alert('حدث خطأ غير متوقع');
+    }
+  };
+
+  const handleApproveSeller = async (sellerId: string) => {
+    try {
+      const seller = moderation?.pendingSellers.find(s => s.id === sellerId);
+      if (!seller) return;
+      
+      const res = await fetch(`/api/admin/users/${seller.user.email}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ACTIVE' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModeration(prev => prev ? {
+          ...prev,
+          pendingSellers: prev.pendingSellers.filter(s => s.id !== sellerId),
+          counts: { ...prev.counts, pendingSellers: prev.counts.pendingSellers - 1 },
+        } : null);
+      }
+    } catch {
+      alert('حدث خطأ غير متوقع');
+    }
+  };
+
+  const handleApproveReview = async (reviewId: string) => {
+    try {
+      const res = await fetch(`/api/admin/reviews/${reviewId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'APPROVED' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModeration(prev => prev ? {
+          ...prev,
+          pendingReviews: prev.pendingReviews.filter(r => r.id !== reviewId),
+          counts: { ...prev.counts, pendingReviews: prev.counts.pendingReviews - 1 },
+        } : null);
+      }
+    } catch {
+      alert('حدث خطأ غير متوقع');
+    }
+  };
+
+  const handleApproveProduct = async (productId: string) => {
+    try {
+      const res = await fetch(`/api/admin/products/${productId}/moderate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ACTIVE' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModeration(prev => prev ? {
+          ...prev,
+          pendingProducts: prev.pendingProducts.filter(p => p.id !== productId),
+          counts: { ...prev.counts, pendingProducts: prev.counts.pendingProducts - 1 },
+        } : null);
+      }
+    } catch {
+      alert('حدث خطأ غير متوقع');
+    }
+  };
+
+  const handleUpdateProductRanking = async (productId: string, updates: { pinned?: boolean; manualBoost?: number; penaltyScore?: number }) => {
+    try {
+      const res = await fetch(`/api/admin/ranking/products/${productId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRankingProducts(prev => prev.map(p => p.id === productId ? { ...p, ...data.data } : p));
       }
     } catch {
       alert('حدث خطأ غير متوقع');
@@ -207,7 +472,7 @@ export default function AdminDashboardPage() {
 
           {/* Tabs */}
           <HStack gap={2} flexWrap="wrap">
-            {['overview', 'users', 'categories'].map((tab) => (
+            {['overview', 'users', 'categories', 'settings', 'moderation', 'ranking', 'audit'].map((tab) => (
               <Button
                 key={tab}
                 size="sm"
@@ -217,7 +482,13 @@ export default function AdminDashboardPage() {
                 borderColor="black"
                 onClick={() => setActiveTab(tab)}
               >
-                {tab === 'overview' ? 'نظرة عامة' : tab === 'users' ? 'المستخدمين' : 'الفئات'}
+                {tab === 'overview' ? 'نظرة عامة' : 
+                 tab === 'users' ? 'المستخدمين' : 
+                 tab === 'categories' ? 'الفئات' :
+                 tab === 'settings' ? 'الإعدادات' :
+                 tab === 'moderation' ? 'المراجعة' :
+                 tab === 'ranking' ? 'الترتيب' :
+                 'سجل التدقيق'}
               </Button>
             ))}
           </HStack>
@@ -423,6 +694,420 @@ export default function AdminDashboardPage() {
                   </Box>
                 ))}
               </SimpleGrid>
+            </VStack>
+          )}
+
+          {/* Settings Tab */}
+          {activeTab === 'settings' && settings && (
+            <VStack gap={6} align="stretch">
+              <Heading size="md" color="black">إعدادات النظام</Heading>
+              
+              {/* Commission Settings */}
+              <Box className="neon-card" p={6}>
+                <VStack align="stretch" gap={4}>
+                  <Heading size="sm" color="black">إعدادات العمولة</Heading>
+                  
+                  <HStack justify="space-between" p={4} bg={settings.freeMode ? 'green.50' : 'gray.50'} borderRadius="lg">
+                    <VStack align="start" gap={1}>
+                      <Text fontWeight="bold">الوضع المجاني</Text>
+                      <Text fontSize="sm" color="gray.600">
+                        {settings.freeMode ? 'مفعل - لا توجد عمولات' : 'معطل - يتم احتساب العمولات'}
+                      </Text>
+                    </VStack>
+                    <Button
+                      size="sm"
+                      colorPalette={settings.freeMode ? 'red' : 'green'}
+                      onClick={() => handleUpdateSettings({ freeMode: !settings.freeMode })}
+                    >
+                      {settings.freeMode ? 'تعطيل' : 'تفعيل'}
+                    </Button>
+                  </HStack>
+                  
+                  <HStack justify="space-between" p={4} bg="gray.50" borderRadius="lg">
+                    <VStack align="start" gap={1}>
+                      <Text fontWeight="bold">العمولة الافتراضية</Text>
+                      <Text fontSize="sm" color="gray.600">
+                        نسبة العمولة العامة لجميع المنتجات
+                      </Text>
+                    </VStack>
+                    <HStack>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="1"
+                        value={settings.globalCommissionRate}
+                        onChange={(e) => setSettings({ ...settings, globalCommissionRate: parseFloat(e.target.value) })}
+                        w="100px"
+                        borderWidth={2}
+                        borderColor="black"
+                      />
+                      <Button
+                        size="sm"
+                        bg="black"
+                        color="white"
+                        onClick={() => handleUpdateSettings({ globalCommissionRate: settings.globalCommissionRate })}
+                      >
+                        حفظ
+                      </Button>
+                    </HStack>
+                  </HStack>
+                </VStack>
+              </Box>
+              
+              {/* Ranking Weights */}
+              <Box className="neon-card" p={6}>
+                <VStack align="stretch" gap={4}>
+                  <Heading size="sm" color="black">أوزان الترتيب</Heading>
+                  <Text fontSize="sm" color="gray.600">حدد أهمية كل عامل في حساب ترتيب المنتجات (المجموع = 1)</Text>
+                  
+                  <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+                    {[
+                      { key: 'w_recency', label: 'الحداثة', desc: 'المنتجات الجديدة' },
+                      { key: 'w_rating', label: 'التقييم', desc: 'تقييمات العملاء' },
+                      { key: 'w_orders', label: 'الطلبات', desc: 'عدد المبيعات' },
+                      { key: 'w_stock', label: 'المخزون', desc: 'توفر المنتج' },
+                      { key: 'w_sellerRep', label: 'سمعة البائع', desc: 'تقييم البائع' },
+                    ].map(({ key, label, desc }) => (
+                      <HStack key={key} justify="space-between" p={3} bg="gray.50" borderRadius="lg">
+                        <VStack align="start" gap={0}>
+                          <Text fontWeight="bold" fontSize="sm">{label}</Text>
+                          <Text fontSize="xs" color="gray.500">{desc}</Text>
+                        </VStack>
+                        <Input
+                          type="number"
+                          step="0.05"
+                          min="0"
+                          max="1"
+                          value={settings.rankingWeights[key as keyof typeof settings.rankingWeights]}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            rankingWeights: { ...settings.rankingWeights, [key]: parseFloat(e.target.value) }
+                          })}
+                          w="80px"
+                          borderWidth={2}
+                          borderColor="black"
+                        />
+                      </HStack>
+                    ))}
+                  </SimpleGrid>
+                  
+                  <Button
+                    bg="black"
+                    color="white"
+                    onClick={() => handleUpdateSettings({ rankingWeights: settings.rankingWeights })}
+                  >
+                    حفظ الأوزان
+                  </Button>
+                </VStack>
+              </Box>
+              
+              {/* Category Commissions */}
+              <Box className="neon-card" p={6}>
+                <VStack align="stretch" gap={4}>
+                  <HStack justify="space-between">
+                    <Heading size="sm" color="black">تجاوزات عمولة الفئات</Heading>
+                  </HStack>
+                  
+                  {categoryCommissions.length === 0 ? (
+                    <Text color="gray.500" fontSize="sm">لا توجد تجاوزات للفئات</Text>
+                  ) : (
+                    categoryCommissions.map((cc) => (
+                      <HStack key={cc.id} justify="space-between" p={3} bg="gray.50" borderRadius="lg">
+                        <Text fontWeight="bold">{cc.category.name}</Text>
+                        <HStack>
+                          <Badge colorPalette="blue">{(cc.commissionRate * 100).toFixed(1)}%</Badge>
+                        </HStack>
+                      </HStack>
+                    ))
+                  )}
+                </VStack>
+              </Box>
+              
+              {/* Seller Commissions */}
+              <Box className="neon-card" p={6}>
+                <VStack align="stretch" gap={4}>
+                  <Heading size="sm" color="black">تجاوزات عمولة البائعين</Heading>
+                  
+                  {sellerCommissions.length === 0 ? (
+                    <Text color="gray.500" fontSize="sm">لا توجد تجاوزات للبائعين</Text>
+                  ) : (
+                    sellerCommissions.map((sc) => (
+                      <HStack key={sc.id} justify="space-between" p={3} bg="gray.50" borderRadius="lg">
+                        <VStack align="start" gap={0}>
+                          <Text fontWeight="bold">{sc.seller.storeName}</Text>
+                          <Text fontSize="xs" color="gray.500">{sc.seller.user.email}</Text>
+                        </VStack>
+                        <HStack>
+                          <Badge colorPalette="purple">{sc.tier}</Badge>
+                          <Badge colorPalette="blue">{(sc.commissionRate * 100).toFixed(1)}%</Badge>
+                        </HStack>
+                      </HStack>
+                    ))
+                  )}
+                </VStack>
+              </Box>
+            </VStack>
+          )}
+
+          {/* Moderation Tab */}
+          {activeTab === 'moderation' && moderation && (
+            <VStack gap={6} align="stretch">
+              <HStack justify="space-between">
+                <Heading size="md" color="black">صندوق المراجعة</Heading>
+                <Badge colorPalette="orange" fontSize="lg" p={2}>
+                  {moderation.counts.total} عنصر معلق
+                </Badge>
+              </HStack>
+              
+              {/* Summary Cards */}
+              <SimpleGrid columns={{ base: 2, md: 4 }} gap={4}>
+                <Box className="neon-card" p={4} textAlign="center" bg="yellow.50">
+                  <Text fontSize="2xl" fontWeight="bold" color="yellow.700">{moderation.counts.pendingSellers}</Text>
+                  <Text color="yellow.600">بائعين جدد</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center" bg="blue.50">
+                  <Text fontSize="2xl" fontWeight="bold" color="blue.700">{moderation.counts.pendingReviews}</Text>
+                  <Text color="blue.600">تقييمات</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center" bg="purple.50">
+                  <Text fontSize="2xl" fontWeight="bold" color="purple.700">{moderation.counts.pendingProducts}</Text>
+                  <Text color="purple.600">منتجات</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center" bg="red.50">
+                  <Text fontSize="2xl" fontWeight="bold" color="red.700">{moderation.counts.blockedProducts}</Text>
+                  <Text color="red.600">محظورة</Text>
+                </Box>
+              </SimpleGrid>
+              
+              {/* Pending Sellers */}
+              {moderation.pendingSellers.length > 0 && (
+                <Box className="neon-card" p={6}>
+                  <Heading size="sm" color="black" mb={4}>بائعين بانتظار الموافقة</Heading>
+                  <VStack align="stretch" gap={3}>
+                    {moderation.pendingSellers.map((seller) => (
+                      <HStack key={seller.id} justify="space-between" p={3} bg="gray.50" borderRadius="lg">
+                        <VStack align="start" gap={0}>
+                          <Text fontWeight="bold">{seller.storeName}</Text>
+                          <Text fontSize="sm" color="gray.600">{seller.user.name} - {seller.user.email}</Text>
+                          <Text fontSize="xs" color="gray.500">
+                            {new Date(seller.createdAt).toLocaleDateString('ar-SY')}
+                          </Text>
+                        </VStack>
+                        <HStack>
+                          <Button size="sm" colorPalette="green" onClick={() => handleApproveSeller(seller.id)}>
+                            قبول
+                          </Button>
+                        </HStack>
+                      </HStack>
+                    ))}
+                  </VStack>
+                </Box>
+              )}
+              
+              {/* Pending Reviews */}
+              {moderation.pendingReviews.length > 0 && (
+                <Box className="neon-card" p={6}>
+                  <Heading size="sm" color="black" mb={4}>تقييمات بانتظار المراجعة</Heading>
+                  <VStack align="stretch" gap={3}>
+                    {moderation.pendingReviews.map((review) => (
+                      <HStack key={review.id} justify="space-between" p={3} bg="gray.50" borderRadius="lg">
+                        <VStack align="start" gap={1}>
+                          <HStack>
+                            <Text fontWeight="bold">{review.customer.name}</Text>
+                            <Badge colorPalette="yellow">{'★'.repeat(review.rating)}</Badge>
+                          </HStack>
+                          <Text fontSize="sm" color="gray.600">{review.comment || 'بدون تعليق'}</Text>
+                          <Text fontSize="xs" color="gray.500">على: {review.product.title}</Text>
+                        </VStack>
+                        <HStack>
+                          <Button size="sm" colorPalette="green" onClick={() => handleApproveReview(review.id)}>
+                            قبول
+                          </Button>
+                        </HStack>
+                      </HStack>
+                    ))}
+                  </VStack>
+                </Box>
+              )}
+              
+              {/* Pending Products */}
+              {moderation.pendingProducts.length > 0 && (
+                <Box className="neon-card" p={6}>
+                  <Heading size="sm" color="black" mb={4}>منتجات بانتظار المراجعة</Heading>
+                  <VStack align="stretch" gap={3}>
+                    {moderation.pendingProducts.map((product) => (
+                      <HStack key={product.id} justify="space-between" p={3} bg="gray.50" borderRadius="lg">
+                        <VStack align="start" gap={0}>
+                          <Text fontWeight="bold">{product.title}</Text>
+                          <Text fontSize="sm" color="gray.600">{Number(product.price).toLocaleString()} ل.س</Text>
+                          <Text fontSize="xs" color="gray.500">من: {product.seller.storeName}</Text>
+                        </VStack>
+                        <HStack>
+                          <Link href={`/products/${product.slug}`} target="_blank">
+                            <Button size="sm" variant="outline">معاينة</Button>
+                          </Link>
+                          <Button size="sm" colorPalette="green" onClick={() => handleApproveProduct(product.id)}>
+                            نشر
+                          </Button>
+                        </HStack>
+                      </HStack>
+                    ))}
+                  </VStack>
+                </Box>
+              )}
+            </VStack>
+          )}
+
+          {/* Ranking Tab */}
+          {activeTab === 'ranking' && (
+            <VStack gap={6} align="stretch">
+              <HStack justify="space-between">
+                <Heading size="md" color="black">وحدة تحكم الترتيب</Heading>
+                <Button bg="black" color="white" onClick={handleRecomputeRanking}>
+                  إعادة حساب الترتيب
+                </Button>
+              </HStack>
+              
+              {/* Ranking Stats */}
+              {rankingStats && (
+                <SimpleGrid columns={{ base: 3 }} gap={4}>
+                  <Box className="neon-card" p={4} textAlign="center">
+                    <Text fontSize="2xl" fontWeight="bold" color="purple.600">{rankingStats.pinnedCount}</Text>
+                    <Text color="gray.600">مثبت</Text>
+                  </Box>
+                  <Box className="neon-card" p={4} textAlign="center">
+                    <Text fontSize="2xl" fontWeight="bold" color="green.600">{rankingStats.boostedCount}</Text>
+                    <Text color="gray.600">معزز</Text>
+                  </Box>
+                  <Box className="neon-card" p={4} textAlign="center">
+                    <Text fontSize="2xl" fontWeight="bold" color="red.600">{rankingStats.penalizedCount}</Text>
+                    <Text color="gray.600">مُعاقب</Text>
+                  </Box>
+                </SimpleGrid>
+              )}
+              
+              {/* Products List */}
+              <Box className="neon-card" p={4} overflowX="auto">
+                <Table.Root size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader>المنتج</Table.ColumnHeader>
+                      <Table.ColumnHeader>النتيجة</Table.ColumnHeader>
+                      <Table.ColumnHeader>مثبت</Table.ColumnHeader>
+                      <Table.ColumnHeader>تعزيز</Table.ColumnHeader>
+                      <Table.ColumnHeader>عقوبة</Table.ColumnHeader>
+                      <Table.ColumnHeader>إجراءات</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {rankingProducts.map((product) => (
+                      <Table.Row key={product.id}>
+                        <Table.Cell>
+                          <VStack align="start" gap={0}>
+                            <Text fontWeight="bold" fontSize="sm">{product.title}</Text>
+                            <Text fontSize="xs" color="gray.500">{product.seller.storeName}</Text>
+                          </VStack>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette={product.score > 0.7 ? 'green' : product.score > 0.4 ? 'yellow' : 'red'}>
+                            {product.score.toFixed(2)}
+                          </Badge>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Button
+                            size="xs"
+                            colorPalette={product.pinned ? 'purple' : 'gray'}
+                            variant={product.pinned ? 'solid' : 'outline'}
+                            onClick={() => handleUpdateProductRanking(product.id, { pinned: !product.pinned })}
+                          >
+                            {product.pinned ? '📌' : '○'}
+                          </Button>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <HStack>
+                            <Button
+                              size="xs"
+                              colorPalette="green"
+                              variant="outline"
+                              onClick={() => handleUpdateProductRanking(product.id, { manualBoost: Math.min(10, product.manualBoost + 0.5) })}
+                            >
+                              +
+                            </Button>
+                            <Text fontSize="sm" fontWeight="bold">{product.manualBoost.toFixed(1)}</Text>
+                            <Button
+                              size="xs"
+                              colorPalette="orange"
+                              variant="outline"
+                              onClick={() => handleUpdateProductRanking(product.id, { manualBoost: Math.max(0, product.manualBoost - 0.5) })}
+                            >
+                              -
+                            </Button>
+                          </HStack>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <HStack>
+                            <Button
+                              size="xs"
+                              colorPalette="red"
+                              variant="outline"
+                              onClick={() => handleUpdateProductRanking(product.id, { penaltyScore: Math.min(10, product.penaltyScore + 0.5) })}
+                            >
+                              +
+                            </Button>
+                            <Text fontSize="sm" fontWeight="bold">{product.penaltyScore.toFixed(1)}</Text>
+                            <Button
+                              size="xs"
+                              colorPalette="green"
+                              variant="outline"
+                              onClick={() => handleUpdateProductRanking(product.id, { penaltyScore: Math.max(0, product.penaltyScore - 0.5) })}
+                            >
+                              -
+                            </Button>
+                          </HStack>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Link href={`/products/${product.slug}`} target="_blank">
+                            <Button size="xs" variant="ghost">👁</Button>
+                          </Link>
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </Box>
+            </VStack>
+          )}
+
+          {/* Audit Log Tab */}
+          {activeTab === 'audit' && (
+            <VStack gap={6} align="stretch">
+              <Heading size="md" color="black">سجل التدقيق</Heading>
+              
+              <Box className="neon-card" p={4}>
+                <VStack align="stretch" gap={3}>
+                  {auditLogs.length === 0 ? (
+                    <Text color="gray.500" textAlign="center">لا توجد سجلات</Text>
+                  ) : (
+                    auditLogs.map((log) => (
+                      <HStack key={log.id} justify="space-between" p={3} bg="gray.50" borderRadius="lg" flexWrap="wrap">
+                        <VStack align="start" gap={0}>
+                          <HStack>
+                            <Badge colorPalette="blue">{log.action}</Badge>
+                            <Badge colorPalette="gray">{log.entityType}</Badge>
+                          </HStack>
+                          <Text fontSize="sm" color="gray.600">
+                            بواسطة: {log.admin.name}
+                          </Text>
+                        </VStack>
+                        <Text fontSize="xs" color="gray.500">
+                          {new Date(log.createdAt).toLocaleString('ar-SY')}
+                        </Text>
+                      </HStack>
+                    ))
+                  )}
+                </VStack>
+              </Box>
             </VStack>
           )}
         </VStack>

@@ -171,6 +171,17 @@ export async function POST(request: NextRequest) {
             price: `${item.lineTotal.toString()} ل.س`,
           }))
         ).catch(console.error);
+        
+        // In-app notification to customer
+        prisma.notification.create({
+          data: {
+            userId: user.id,
+            type: 'ORDER_PLACED',
+            title: 'تم استلام طلبك',
+            message: `طلبك رقم #${order.id.slice(-8)} بانتظار تأكيد البائع`,
+            link: `/dashboard`,
+          },
+        }).catch(console.error);
       }
       
       // Email to seller
@@ -180,6 +191,23 @@ export async function POST(request: NextRequest) {
         customerUser?.name || 'عميل',
         `${order.total.toString()} ل.س`
       ).catch(console.error);
+      
+      // In-app notification to seller
+      const sellerUser = await prisma.user.findFirst({
+        where: { sellerProfile: { id: order.sellerId } },
+        select: { id: true },
+      });
+      if (sellerUser) {
+        prisma.notification.create({
+          data: {
+            userId: sellerUser.id,
+            type: 'NEW_ORDER',
+            title: 'طلب جديد!',
+            message: `لديك طلب جديد #${order.id.slice(-8)} من ${customerUser?.name || 'عميل'}`,
+            link: `/seller/orders`,
+          },
+        }).catch(console.error);
+      }
     }
     
     return success(

@@ -82,6 +82,17 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       STATUS_LABELS[newStatus]
     ).catch(console.error);
     
+    // In-app notification to customer
+    prisma.notification.create({
+      data: {
+        userId: order.customer.id,
+        type: 'ORDER_STATUS_UPDATE',
+        title: 'تحديث حالة الطلب',
+        message: `طلبك #${order.id.slice(-8)}: ${STATUS_LABELS[newStatus]}`,
+        link: `/dashboard`,
+      },
+    }).catch(console.error);
+
     return success({
       id: order.id,
       previousStatus,

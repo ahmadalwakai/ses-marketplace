@@ -226,3 +226,126 @@ export async function recomputeProductScore(productId: string): Promise<number> 
   
   return score;
 }
+
+export interface ScoreExplanation {
+  productId: string;
+  productTitle: string;
+  finalScore: number;
+  isPinned: boolean;
+  breakdown: {
+    recency: { raw: number; weight: number; weighted: number; description: string };
+    rating: { raw: number; weight: number; weighted: number; description: string };
+    orders: { raw: number; weight: number; weighted: number; description: string };
+    stock: { raw: number; weight: number; weighted: number; description: string };
+    sellerRep: { raw: number; weight: number; weighted: number; description: string };
+  };
+  baseScore: number;
+  adjustments: {
+    manualBoost: number;
+    penaltyScore: number;
+  };
+  factors: {
+    ageInDays: number;
+    ratingAvg: number;
+    ratingCount: number;
+    orderCount: number;
+    quantity: number;
+    sellerRatingAvg: number;
+    sellerRatingCount: number;
+  };
+}
+
+/**
+ * Explain how a product's score was calculated
+ */
+export async function explainScore(productId: string): Promise<ScoreExplanation> {
+  const weights = await getRankingWeights();
+  
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: {
+      seller: {
+        select: { ratingAvg: true, ratingCount: true },
+      },
+      _count: {
+        select: { orderItems: true },
+      },
+    },
+  });
+  
+  if (!product) throw new Error('Product not found');
+  
+  const now = new Date();
+  const ageInDays = Math.floor((now.getTime() - product.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+  
+  // Calculate raw scores
+  const rawRecency = ageInDays > 365 ? 0 : Math.max(0, 1 - ageInDays / 365);
+  const rawRating = product.ratingCount === 0 ? 0.5 : product.ratingAvg / 5;
+  const rawOrders = Math.min(1, Math.log10(product._count.orderItems + 1) / 2);
+  const rawStock = product.quantity === 0 ? 0 : product.quantity >= 10 ? 1 : product.quantity / 10;
+  const rawSellerRep = product.seller.ratingCount === 0 ? 0.5 : product.seller.ratingAvg / 5;
+  
+  // Calculate weighted scores
+  const weightedRecency = weights.w_recency * rawRecency;
+  const weightedRating = weights.w_rating * rawRating;
+  const weightedOrders = weights.w_orders * rawOrders;
+  const weightedStock = weights.w_stock * rawStock;
+  const weightedSellerRep = weights.w_sellerRep * rawSellerRep;
+  
+  const baseScore = weightedRecency + weightedRating + weightedOrders + weightedStock + weightedSellerRep;
+  const finalScore = Math.max(0, Math.min(10, baseScore + product.manualBoost - product.penaltyScore));
+  
+  return {
+    productId: product.id,
+    productTitle: product.title,
+    finalScore: Math.round(finalScore * 1000) / 1000,
+    isPinned: product.pinned,
+    breakdown: {
+      recency: {
+        raw: Math.round(rawRecency * 1000) / 1000,
+        weight: weights.w_recency,
+        weighted: Math.round(weightedRecency * 1000) / 1000,
+        description: `المنتج عمره ${ageInDays} يوم (السنة = 0, جديد = 1)`,
+      },
+      rating: {
+        raw: Math.round(rawRating * 1000) / 1000,
+        weight: weights.w_rating,
+        weighted: Math.round(weightedRating * 1000) / 1000,
+        description: `${product.ratingAvg}/5 من ${product.ratingCount} تقييم`,
+      },
+      orders: {
+        raw: Math.round(rawOrders * 1000) / 1000,
+        weight: weights.w_orders,
+        weighted: Math.round(weightedOrders * 1000) / 1000,
+        description: `${product._count.orderItems} طلب (مقياس لوغاريتمي)`,
+      },
+      stock: {
+        raw: Math.round(rawStock * 1000) / 1000,
+        weight: weights.w_stock,
+        weighted: Math.round(weightedStock * 1000) / 1000,
+        description: `${product.quantity} وحدة متوفرة`,
+      },
+      sellerRep: {
+        raw: Math.round(rawSellerRep * 1000) / 1000,
+        weight: weights.w_sellerRep,
+        weighted: Math.round(weightedSellerRep * 1000) / 1000,
+        description: `سمعة البائع ${product.seller.ratingAvg}/5`,
+      },
+    },
+    baseScore: Math.round(baseScore * 1000) / 1000,
+    adjustments: {
+      manualBoost: product.manualBoost,
+      penaltyScore: product.penaltyScore,
+    },
+    factors: {
+      ageInDays,
+      ratingAvg: product.ratingAvg,
+      ratingCount: product.ratingCount,
+      orderCount: product._count.orderItems,
+      quantity: product.quantity,
+      sellerRatingAvg: product.seller.ratingAvg,
+      sellerRatingCount: product.seller.ratingCount,
+    },
+  };
+}
+

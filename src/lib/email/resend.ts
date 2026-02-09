@@ -376,6 +376,26 @@ export async function sendSellerVerificationRejectedEmail(to: string, storeName:
   });
 }
 
+export async function sendDisputeEscalatedEmail(
+  to: string,
+  disputeId: string,
+  orderId: string,
+  reason: string
+) {
+  const html = baseTemplate(`
+    <h2>تم تصعيد النزاع</h2>
+    <p>تم تصعيد النزاع على الطلب رقم: <strong>${orderId}</strong> بسبب عدم الرد خلال 48 ساعة.</p>
+    <p><strong>السبب الأصلي:</strong> ${reason}</p>
+    <p>سيقوم فريق الإدارة بمراجعة النزاع واتخاذ القرار المناسب.</p>
+  `);
+  
+  return sendEmail({
+    to,
+    subject: `تصعيد نزاع - الطلب #${orderId.slice(-8)}`,
+    html,
+  });
+}
+
 export default {
   sendEmail,
   sendWelcomeEmail,
@@ -387,6 +407,7 @@ export default {
   sendSellerNewOrderEmail,
   sendDisputeOpenedEmail,
   sendDisputeResolvedEmail,
+  sendDisputeEscalatedEmail,
   sendAccountSuspendedEmail,
   sendAccountBannedEmail,
   sendAccountActivatedEmail,

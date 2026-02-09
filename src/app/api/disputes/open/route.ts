@@ -83,6 +83,23 @@ export async function POST(request: NextRequest) {
       data.reason
     ).catch(console.error);
     
+    // In-app notification to seller
+    const sellerUser = await prisma.user.findFirst({
+      where: { sellerProfile: { id: order.sellerId } },
+      select: { id: true },
+    });
+    if (sellerUser) {
+      prisma.notification.create({
+        data: {
+          userId: sellerUser.id,
+          type: 'DISPUTE_OPENED',
+          title: 'نزاع جديد',
+          message: `تم فتح نزاع على الطلب #${order.id.slice(-8)}`,
+          link: `/seller/orders`,
+        },
+      }).catch(console.error);
+    }
+
     return success(dispute, 201);
   } catch (err) {
     return handleError(err);

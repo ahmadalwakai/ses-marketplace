@@ -104,6 +104,50 @@ export const createProductSchema = z.object({
 
 export const updateProductSchema = createProductSchema.partial();
 
+// Wizard step schemas for multi-step product creation
+export const wizardStep1Schema = z.object({
+  title: z.string().min(3, 'العنوان مطلوب (3 أحرف على الأقل)').max(200, 'العنوان طويل جداً'),
+  titleAr: z.string().max(200).optional(),
+  categoryId: z.string().cuid('يجب اختيار فئة صالحة').optional(),
+  brand: z.string().max(100).optional(),
+});
+
+export const wizardStep2Schema = z.object({
+  description: z.string().min(10, 'الوصف مطلوب (10 أحرف على الأقل)').max(5000),
+  descriptionAr: z.string().max(5000).optional(),
+  condition: productConditionSchema.default('NEW'),
+  tags: z.array(z.string()).max(10, 'أقصى عدد 10 علامات').default([]),
+});
+
+export const wizardStep3Schema = z.object({
+  price: z.number().positive('السعر يجب أن يكون أكبر من صفر'),
+  currency: z.string().default('SYP'),
+  quantity: z.number().int().min(0, 'الكمية لا يمكن أن تكون سالبة').default(0),
+});
+
+export const wizardStep4Schema = z.object({
+  slug: z.string()
+    .min(3, 'الرابط مطلوب (3 أحرف على الأقل)')
+    .max(200)
+    .regex(/^[a-z0-9-]+$/, 'الرابط يجب أن يحتوي على أحرف صغيرة وأرقام وشرطات فقط'),
+});
+
+// Bulk edit schema for multiple products
+export const bulkEditItemSchema = z.object({
+  productId: z.string().cuid(),
+  price: z.number().positive().optional(),
+  quantity: z.number().int().min(0).optional(),
+});
+
+export const bulkEditSchema = z.object({
+  items: z.array(bulkEditItemSchema).min(1, 'يجب تحديد منتج واحد على الأقل').max(50, 'أقصى 50 منتج في المرة الواحدة'),
+});
+
+// Seller profile update with lowStockThreshold
+export const updateSellerSettingsSchema = z.object({
+  lowStockThreshold: z.number().int().min(0).max(100).optional(),
+});
+
 export const productFilterSchema = z.object({
   q: z.string().optional(),
   categoryId: z.string().cuid().optional(),
@@ -307,3 +351,9 @@ export type DisputeMessageInput = z.infer<typeof disputeMessageSchema>;
 export type UpdateAdminSettingsInput = z.infer<typeof updateAdminSettingsSchema>;
 export type SignUploadInput = z.infer<typeof signUploadSchema>;
 export type ConfirmUploadInput = z.infer<typeof confirmUploadSchema>;
+export type WizardStep1Input = z.infer<typeof wizardStep1Schema>;
+export type WizardStep2Input = z.infer<typeof wizardStep2Schema>;
+export type WizardStep3Input = z.infer<typeof wizardStep3Schema>;
+export type WizardStep4Input = z.infer<typeof wizardStep4Schema>;
+export type BulkEditInput = z.infer<typeof bulkEditSchema>;
+export type UpdateSellerSettingsInput = z.infer<typeof updateSellerSettingsSchema>;

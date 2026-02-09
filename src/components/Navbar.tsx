@@ -16,6 +16,16 @@ import {
 } from '@chakra-ui/react';
 import { useWishlistStore, useCompareStore, useUIStore, useSearchStore } from '@/lib/store';
 
+interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string;
+  read: boolean;
+  createdAt: string;
+}
+
 // Debounce hook
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -38,6 +48,78 @@ export default function Navbar() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedQuery = useDebounce(localQuery, 300);
+  
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // Fetch notifications
+  useEffect(() => {
+    if (session?.user) {
+      fetchNotifications();
+      // Poll for new notifications every 30 seconds
+      const interval = setInterval(fetchNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [session]);
+  
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch('/api/notifications/me?limit=10');
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.data.notifications);
+        setUnreadCount(data.data.unreadCount);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
+  
+  const markAllRead = async () => {
+    try {
+      await fetch('/api/notifications/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markAllRead: true }),
+      });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
+  
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.read) {
+      await fetch('/api/notifications/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [notification.id] }),
+      });
+      setNotifications(prev => 
+        prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    }
+    setShowNotifications(false);
+    if (notification.link) {
+      router.push(notification.link);
+    }
+  };
+
+  // Close notifications on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Fetch autocomplete suggestions
   useEffect(() => {
@@ -191,6 +273,105 @@ export default function Navbar() {
                     )}
                   </Button>
                 </Link>
+
+                {/* Notifications */}
+                {session && (
+                  <Box ref={notificationsRef} position="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      position="relative"
+                      aria-label="الإشعارات"
+                      onClick={() => setShowNotifications(!showNotifications)}
+                    >
+                      <Text fontSize="lg">🔔</Text>
+                      {unreadCount > 0 && (
+                        <Box
+                          position="absolute"
+                          top="-1"
+                          right="-1"
+                          bg="red.500"
+                          color="white"
+                          fontSize="xs"
+                          w="18px"
+                          h="18px"
+                          borderRadius="full"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </Box>
+                      )}
+                    </Button>
+
+                    {/* Notifications Dropdown */}
+                    {showNotifications && (
+                      <Box
+                        position="absolute"
+                        top="100%"
+                        left={{ base: 'auto', md: 0 }}
+                        right={{ base: 0, md: 'auto' }}
+                        w={{ base: '300px', md: '350px' }}
+                        bg="white"
+                        borderWidth={2}
+                        borderColor="black"
+                        borderRadius="lg"
+                        boxShadow="4px 4px 0 0 black"
+                        zIndex={300}
+                        maxH="400px"
+                        overflowY="auto"
+                      >
+                        <HStack justify="space-between" p={3} borderBottomWidth={1} borderColor="gray.200">
+                          <Text fontWeight="bold">الإشعارات</Text>
+                          {unreadCount > 0 && (
+                            <Button size="xs" variant="ghost" onClick={markAllRead}>
+                              قراءة الكل
+                            </Button>
+                          )}
+                        </HStack>
+                        
+                        {notifications.length === 0 ? (
+                          <Box p={4} textAlign="center">
+                            <Text color="gray.500">لا توجد إشعارات</Text>
+                          </Box>
+                        ) : (
+                          <VStack align="stretch" gap={0}>
+                            {notifications.map((notification) => (
+                              <Box
+                                key={notification.id}
+                                p={3}
+                                cursor="pointer"
+                                bg={notification.read ? 'white' : 'blue.50'}
+                                _hover={{ bg: 'gray.100' }}
+                                onClick={() => handleNotificationClick(notification)}
+                                borderBottomWidth={1}
+                                borderColor="gray.100"
+                              >
+                                <VStack align="start" gap={1}>
+                                  <HStack w="full" justify="space-between">
+                                    <Text fontWeight="bold" fontSize="sm" color="black">
+                                      {notification.title}
+                                    </Text>
+                                    {!notification.read && (
+                                      <Box w="8px" h="8px" bg="blue.500" borderRadius="full" />
+                                    )}
+                                  </HStack>
+                                  <Text fontSize="xs" color="gray.600" lineClamp={2}>
+                                    {notification.message}
+                                  </Text>
+                                  <Text fontSize="xs" color="gray.400">
+                                    {new Date(notification.createdAt).toLocaleDateString('ar-SY')}
+                                  </Text>
+                                </VStack>
+                              </Box>
+                            ))}
+                          </VStack>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                )}
 
                 {/* Auth */}
                 {status === 'loading' ? (

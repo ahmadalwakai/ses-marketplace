@@ -80,6 +80,52 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       outcome
     ).catch(console.error);
     
+    // In-app notifications
+    // To customer
+    prisma.notification.create({
+      data: {
+        userId: dispute.order.customer.email, // We need user ID, get it
+        type: 'DISPUTE_RESOLVED',
+        title: 'تم حل النزاع',
+        message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}`,
+        link: `/dashboard`,
+      },
+    }).catch(console.error);
+    
+    // Get customer and seller user IDs for notifications
+    const customerUser = await prisma.user.findUnique({
+      where: { email: dispute.order.customer.email },
+      select: { id: true },
+    });
+    const sellerUser = await prisma.user.findFirst({
+      where: { sellerProfile: { id: dispute.order.sellerId } },
+      select: { id: true },
+    });
+    
+    if (customerUser) {
+      prisma.notification.create({
+        data: {
+          userId: customerUser.id,
+          type: 'DISPUTE_RESOLVED',
+          title: 'تم حل النزاع',
+          message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
+          link: `/dashboard`,
+        },
+      }).catch(console.error);
+    }
+    
+    if (sellerUser) {
+      prisma.notification.create({
+        data: {
+          userId: sellerUser.id,
+          type: 'DISPUTE_RESOLVED',
+          title: 'تم حل النزاع',
+          message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
+          link: `/seller/orders`,
+        },
+      }).catch(console.error);
+    }
+
     return success({ id, status, outcome });
   } catch (err) {
     return handleError(err);
