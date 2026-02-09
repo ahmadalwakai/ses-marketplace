@@ -1,0 +1,503 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  VISITOR
+  CUSTOMER
+  SELLER
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum SellerVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  PAUSED
+  BLOCKED
+}
+
+enum ProductCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PACKING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  DISPUTED
+  RESOLVED
+}
+
+enum PaymentMethod {
+  CASH
+}
+
+enum DeliveryMode {
+  ARRANGED
+  TRACKED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  HIDDEN
+}
+
+enum DisputeStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  CLOSED
+}
+
+enum TargetType {
+  USER
+  PRODUCT
+  REVIEW
+  SELLER
+}
+
+enum UploadStatus {
+  PENDING
+  CONFIRMED
+  EXPIRED
+}
+
+// ============================================
+// NEXTAUTH MODELS
+// ============================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
+  @@index([expires])
+}
+
+model RateLimitEntry {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  count      Int      @default(1)
+  lastReset  DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([key])
+  @@index([lastReset])
+}
+
+// ============================================
+// USER MODELS
+// ============================================
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  emailVerified DateTime?
+  name          String?
+  password      String?
+  image         String?
+  role          Role       @default(CUSTOMER)
+  status        UserStatus @default(PENDING)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  sellerProfile  SellerProfile?
+  orders         Order[]        @relation("CustomerOrders")
+  reviews        Review[]
+  disputes       Dispute[]      @relation("DisputeOpener")
+  disputeMessages DisputeMessage[]
+  reports        Report[]
+  auditLogs      AuditLog[]
+  aiLogs         AiLog[]
+  uploadSessions UploadSession[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+model SellerProfile {
+  id                 String                   @id @default(cuid())
+  userId             String                   @unique
+  storeName          String
+  slug               String                   @unique
+  bio                String?
+  phone              String?
+  verificationStatus SellerVerificationStatus @default(PENDING)
+  ratingAvg          Float                    @default(0)
+  ratingCount        Int                      @default(0)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products Product[]
+  orders   Order[]   @relation("SellerOrders")
+
+  @@index([slug])
+  @@index([verificationStatus])
+}
+
+// ============================================
+// CATEGORY MODEL
+// ============================================
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  nameAr    String?
+  slug      String   @unique
+  parentId  String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@index([parentId])
+  @@index([sortOrder])
+  @@index([isActive])
+}
+
+// ============================================
+// PRODUCT MODELS
+// ============================================
+
+model Product {
+  id           String           @id @default(cuid())
+  sellerId     String
+  title        String
+  titleAr      String?
+  slug         String           @unique
+  description  String           @db.Text
+  descriptionAr String?         @db.Text
+  condition    ProductCondition @default(NEW)
+  price        Decimal          @db.Decimal(12, 2)
+  currency     String           @default("SYP")
+  quantity     Int              @default(0)
+  status       ProductStatus    @default(DRAFT)
+  categoryId   String?
+  brand        String?
+  tags         Json             @default("[]")
+  ratingAvg    Float            @default(0)
+  ratingCount  Int              @default(0)
+  score        Float            @default(0)
+  manualBoost  Float            @default(0)
+  penaltyScore Float            @default(0)
+  pinned       Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  seller     SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category   Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  images     ProductImage[]
+  orderItems OrderItem[]
+  reviews    Review[]
+
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([slug])
+  @@index([pinned, score, createdAt])
+  @@index([price])
+  @@index([condition])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  alt       String?
+  sortOrder Int      @default(0)
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+// ============================================
+// ORDER MODELS
+// ============================================
+
+model Order {
+  id              String        @id @default(cuid())
+  customerId      String
+  sellerId        String
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod @default(CASH)
+  subtotal        Decimal       @db.Decimal(12, 2)
+  commissionTotal Decimal       @db.Decimal(12, 2)
+  total           Decimal       @db.Decimal(12, 2)
+  deliveryMode    DeliveryMode  @default(ARRANGED)
+  deliveryAddress Json
+  phone           String
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer User @relation("CustomerOrders", fields: [customerId], references: [id])
+  seller   SellerProfile @relation("SellerOrders", fields: [sellerId], references: [id])
+  items    OrderItem[]
+  reviews  Review[]
+  dispute  Dispute?
+
+  @@index([customerId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id                     String  @id @default(cuid())
+  orderId                String
+  productId              String
+  titleSnapshot          String
+  priceSnapshot          Decimal @db.Decimal(12, 2)
+  qty                    Int
+  lineTotal              Decimal @db.Decimal(12, 2)
+  commissionRateSnapshot Decimal @db.Decimal(5, 4)
+  commissionAmount       Decimal @db.Decimal(12, 2)
+  sellerNetAmount        Decimal @db.Decimal(12, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// ============================================
+// REVIEW MODEL
+// ============================================
+
+model Review {
+  id         String       @id @default(cuid())
+  orderId    String
+  productId  String
+  customerId String
+  rating     Int
+  comment    String?
+  status     ReviewStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  order    Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product  Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer User    @relation(fields: [customerId], references: [id])
+
+  @@unique([orderId, productId, customerId])
+  @@index([productId])
+  @@index([status])
+}
+
+// ============================================
+// DISPUTE MODELS
+// ============================================
+
+model Dispute {
+  id         String        @id @default(cuid())
+  orderId    String        @unique
+  openedById String
+  status     DisputeStatus @default(OPEN)
+  reason     String        @db.Text
+  outcome    String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  order    Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  openedBy User             @relation("DisputeOpener", fields: [openedById], references: [id])
+  messages DisputeMessage[]
+
+  @@index([status])
+}
+
+model DisputeMessage {
+  id        String   @id @default(cuid())
+  disputeId String
+  senderId  String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  sender  User    @relation(fields: [senderId], references: [id])
+
+  @@index([disputeId])
+}
+
+// ============================================
+// REPORT MODEL
+// ============================================
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  targetType TargetType
+  targetId   String
+  reason     String       @db.Text
+  status     ReportStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  reporter User @relation(fields: [reporterId], references: [id])
+
+  @@index([targetType, targetId])
+  @@index([status])
+}
+
+// ============================================
+// ADMIN MODELS
+// ============================================
+
+model AdminSettings {
+  id                   String   @id @default("singleton")
+  freeMode             Boolean  @default(false)
+  globalCommissionRate Decimal  @db.Decimal(5, 4) @default(0.05)
+  rankingWeights       Json     @default("{\"w_recency\": 0.3, \"w_rating\": 0.25, \"w_orders\": 0.2, \"w_stock\": 0.15, \"w_sellerRep\": 0.1}")
+  seoTemplates         Json     @default("{}")
+  featureFlags         Json     @default("{\"maxUploadSizeMb\": 5, \"allowedMimes\": [\"image/jpeg\", \"image/png\", \"image/webp\"]}")
+  updatedAt            DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([adminId])
+  @@index([createdAt])
+}
+
+// ============================================
+// AI LOG MODEL
+// ============================================
+
+model AiLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  tool            String
+  promptHash      String
+  responseSummary String?
+  tokensIn        Int?
+  tokensOut       Int?
+  costCents       Int?
+  createdAt       DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([tool, createdAt])
+  @@index([userId])
+}
+
+// ============================================
+// UPLOAD SESSION MODEL
+// ============================================
+
+model UploadSession {
+  id        String       @id @default(cuid())
+  userId    String
+  key       String       @unique
+  mime      String
+  size      Int
+  status    UploadStatus @default(PENDING)
+  createdAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+}
