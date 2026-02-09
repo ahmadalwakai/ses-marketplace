@@ -1,12 +1,23 @@
 import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { requireAdmin } from '@/lib/rbac';
-import { updateAdminSettingsSchema } from '@/lib/validations';
+import prisma, { createAuditLog, notifyAdmins } from '@/lib/prisma';
+import { requireAdminActive } from '@/lib/rbac';
 import { success, handleError } from '@/lib/api-response';
+import { z } from 'zod';
+
+const updateSettingsSchema = z.object({
+  freeMode: z.boolean().optional(),
+  globalCommissionRate: z.number().min(0).max(1).optional(),
+  rankingWeights: z.record(z.number()).optional(),
+  seoTemplates: z.record(z.string()).optional(),
+  featureFlags: z.record(z.unknown()).optional(),
+  navConfig: z.record(z.unknown()).optional(),
+  cookieConsentConfig: z.record(z.unknown()).optional(),
+  searchConfig: z.record(z.unknown()).optional(),
+});
 
 export async function GET() {
   try {
-    await requireAdmin();
+    await requireAdminActive();
     
     let settings = await prisma.adminSettings.findUnique({
       where: { id: 'singleton' },
@@ -15,23 +26,7 @@ export async function GET() {
     // Create default settings if not exists
     if (!settings) {
       settings = await prisma.adminSettings.create({
-        data: {
-          id: 'singleton',
-          freeMode: false,
-          globalCommissionRate: 0.05,
-          rankingWeights: {
-            w_recency: 0.3,
-            w_rating: 0.25,
-            w_orders: 0.2,
-            w_stock: 0.15,
-            w_sellerRep: 0.1,
-          },
-          seoTemplates: {},
-          featureFlags: {
-            maxUploadSizeMb: 5,
-            allowedMimes: ['image/jpeg', 'image/png', 'image/webp'],
-          },
-        },
+        data: { id: 'singleton' },
       });
     }
     
@@ -43,9 +38,9 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const admin = await requireAdmin();
+    const admin = await requireAdminActive();
     const body = await request.json();
-    const data = updateAdminSettingsSchema.parse(body);
+    const data = updateSettingsSchema.parse(body);
     
     // Get current settings
     const current = await prisma.adminSettings.findUnique({
@@ -77,6 +72,21 @@ export async function PATCH(request: NextRequest) {
       const currentFlags = (current?.featureFlags as object) || {};
       updateData.featureFlags = { ...currentFlags, ...data.featureFlags };
     }
+
+    if (data.navConfig) {
+      const currentNav = (current?.navConfig as object) || {};
+      updateData.navConfig = { ...currentNav, ...data.navConfig };
+    }
+
+    if (data.cookieConsentConfig) {
+      const currentCookie = (current?.cookieConsentConfig as object) || {};
+      updateData.cookieConsentConfig = { ...currentCookie, ...data.cookieConsentConfig };
+    }
+
+    if (data.searchConfig) {
+      const currentSearch = (current?.searchConfig as object) || {};
+      updateData.searchConfig = { ...currentSearch, ...data.searchConfig };
+    }
     
     const updated = await prisma.adminSettings.upsert({
       where: { id: 'singleton' },
@@ -88,14 +98,21 @@ export async function PATCH(request: NextRequest) {
     });
     
     // Log action
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.id,
-        action: 'UPDATE_SETTINGS',
-        entityType: 'AdminSettings',
-        entityId: 'singleton',
-        metadata: { changes: data },
-      },
+    await createAuditLog({
+      adminId: admin.id,
+      action: 'UPDATE_SETTINGS',
+      entityType: 'AdminSettings',
+      entityId: 'singleton',
+      metadata: { changes: data },
+    });
+
+    // Notify other admins about settings change
+    await notifyAdmins({
+      type: 'SETTINGS_CHANGED',
+      title: 'تم تحديث الإعدادات',
+      body: `قام ${admin.name || admin.email} بتحديث إعدادات النظام`,
+      entityType: 'AdminSettings',
+      entityId: 'singleton',
     });
     
     return success(updated);

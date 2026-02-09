@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { requireAdmin } from '@/lib/rbac';
+import prisma, { createAuditLog, notifyAdmins } from '@/lib/prisma';
+import { requireAdminActive } from '@/lib/rbac';
 import { categorySchema, paginationSchema } from '@/lib/validations';
 import { success, error, paginated, handleError, paginationMeta } from '@/lib/api-response';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdminActive();
     const { searchParams } = new URL(request.url);
     const params = Object.fromEntries(searchParams.entries());
     const { page, limit } = paginationSchema.parse(params);
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin();
+    const admin = await requireAdminActive();
     const body = await request.json();
     const data = categorySchema.parse(body);
     
@@ -73,14 +73,12 @@ export async function POST(request: NextRequest) {
     });
     
     // Log action
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.id,
-        action: 'CREATE_CATEGORY',
-        entityType: 'Category',
-        entityId: category.id,
-        metadata: { name: data.name },
-      },
+    await createAuditLog({
+      adminId: admin.id,
+      action: 'CREATE_CATEGORY',
+      entityType: 'Category',
+      entityId: category.id,
+      metadata: { name: data.name },
     });
     
     return success(category, 201);

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { requireAdmin } from '@/lib/rbac';
+import prisma, { createAuditLog, notifyAdmins } from '@/lib/prisma';
+import { requireAdminActive } from '@/lib/rbac';
 import { resolveDisputeSchema } from '@/lib/validations';
 import { success, error, handleError } from '@/lib/api-response';
 import { sendDisputeResolvedEmail } from '@/lib/email/resend';
@@ -11,7 +11,7 @@ interface Props {
 
 export async function PATCH(request: NextRequest, { params }: Props) {
   try {
-    const admin = await requireAdmin();
+    const admin = await requireAdminActive();
     const { id } = await params;
     const body = await request.json();
     const { status, outcome } = resolveDisputeSchema.parse(body);
@@ -21,10 +21,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       include: {
         order: {
           include: {
-            customer: { select: { email: true } },
+            customer: { select: { id: true, email: true, name: true } },
             seller: {
               include: {
-                user: { select: { email: true } },
+                user: { select: { id: true, email: true } },
               },
             },
           },
@@ -55,17 +55,15 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     ]);
     
     // Log action
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.id,
-        action: 'RESOLVE_DISPUTE',
-        entityType: 'Dispute',
-        entityId: id,
-        metadata: { previousStatus, newStatus: status, outcome },
-      },
+    await createAuditLog({
+      adminId: admin.id,
+      action: 'RESOLVE_DISPUTE',
+      entityType: 'Dispute',
+      entityId: id,
+      metadata: { previousStatus, newStatus: status, outcome },
     });
     
-    // Notify parties
+    // Notify parties via email
     sendDisputeResolvedEmail(
       dispute.order.customer.email,
       id,
@@ -80,51 +78,32 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       outcome
     ).catch(console.error);
     
-    // In-app notifications
-    // To customer
+    // In-app notification - customer
     prisma.notification.create({
       data: {
-        userId: dispute.order.customer.email, // We need user ID, get it
+        userId: dispute.order.customer.id,
         type: 'DISPUTE_RESOLVED',
         title: 'تم حل النزاع',
-        message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}`,
-        link: `/dashboard`,
+        message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
+        body: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
+        entityType: 'Dispute',
+        entityId: id,
       },
     }).catch(console.error);
     
-    // Get customer and seller user IDs for notifications
-    const customerUser = await prisma.user.findUnique({
-      where: { email: dispute.order.customer.email },
-      select: { id: true },
-    });
-    const sellerUser = await prisma.user.findFirst({
-      where: { sellerProfile: { id: dispute.order.sellerId } },
-      select: { id: true },
-    });
-    
-    if (customerUser) {
-      prisma.notification.create({
-        data: {
-          userId: customerUser.id,
-          type: 'DISPUTE_RESOLVED',
-          title: 'تم حل النزاع',
-          message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
-          link: `/dashboard`,
-        },
-      }).catch(console.error);
-    }
-    
-    if (sellerUser) {
-      prisma.notification.create({
-        data: {
-          userId: sellerUser.id,
-          type: 'DISPUTE_RESOLVED',
-          title: 'تم حل النزاع',
-          message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
-          link: `/seller/orders`,
-        },
-      }).catch(console.error);
-    }
+    // In-app notification - seller
+    const sellerUserId = dispute.order.seller.user.id;
+    prisma.notification.create({
+      data: {
+        userId: sellerUserId,
+        type: 'DISPUTE_RESOLVED',
+        title: 'تم حل النزاع',
+        message: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
+        body: `تم حل النزاع على الطلب #${dispute.orderId.slice(-8)}: ${outcome}`,
+        entityType: 'Dispute',
+        entityId: id,
+      },
+    }).catch(console.error);
 
     return success({ id, status, outcome });
   } catch (err) {

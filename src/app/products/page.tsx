@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Box,
   Container,
@@ -28,25 +29,49 @@ interface Product {
   totalReviews: number;
 }
 
-export default function ProductsPage() {
+function ProductsContent() {
+  const searchParams = useSearchParams();
+  const initialQ = searchParams.get('q') || '';
+  const showAdvancedParam = searchParams.get('advanced') === 'true';
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialQ);
+  const [showAdvanced, setShowAdvanced] = useState(showAdvancedParam);
+
+  // Advanced filter state
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [condition, setCondition] = useState('');
+  const [sort, setSort] = useState('relevance');
+  const [aggregations, setAggregations] = useState<{
+    conditions: { condition: string; count: number }[];
+    priceRange: { min: number; max: number };
+    categories: { categoryId: string; count: number }[];
+  } | null>(null);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    fetchProducts(initialQ);
+  }, [initialQ]);
 
   const fetchProducts = async (query?: string) => {
     setLoading(true);
     try {
-      const url = query 
-        ? `/api/products?search=${encodeURIComponent(query)}`
-        : '/api/products';
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      if (minPrice) params.set('minPrice', minPrice);
+      if (maxPrice) params.set('maxPrice', maxPrice);
+      if (condition) params.set('condition', condition);
+      if (sort) params.set('sort', sort);
+      
+      const url = `/api/search?${params.toString()}`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
-        setProducts(data.data.products);
+        setProducts(data.data || []);
+        if (data.aggregations) {
+          setAggregations(data.aggregations);
+        }
       }
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -60,6 +85,18 @@ export default function ProductsPage() {
     fetchProducts(search);
   };
 
+  const handleApplyFilters = () => {
+    fetchProducts(search);
+  };
+
+  const handleClearFilters = () => {
+    setMinPrice('');
+    setMaxPrice('');
+    setCondition('');
+    setSort('relevance');
+    fetchProducts(search);
+  };
+
   return (
     <Box minH="100vh" bg="white" py={10}>
       <Container maxW="7xl">
@@ -70,39 +107,154 @@ export default function ProductsPage() {
               جميع المنتجات
             </Heading>
             <Text color="gray.600" textAlign="center">
-              تصفح منتجاتنا واختر ما يناسبك
+              ابحث عن أي شيء - تصفح منتجاتنا واختر ما يناسبك
             </Text>
           </VStack>
 
           {/* Search */}
-          <Box
-            as="form"
-            onSubmit={handleSearch}
-            maxW="xl"
-            mx="auto"
-            w="full"
-          >
-            <HStack>
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="ابحث عن منتج..."
-                size="lg"
-                borderWidth={2}
-                borderColor="black"
-                _focus={{ boxShadow: '2px 2px 0 0 black' }}
-              />
-              <Button
-                type="submit"
-                size="lg"
-                bg="black"
-                color="white"
-                _hover={{ bg: 'gray.800' }}
-                px={8}
-              >
-                بحث
-              </Button>
-            </HStack>
+          <Box as="form" onSubmit={handleSearch} maxW="3xl" mx="auto" w="full">
+            <VStack gap={3}>
+              <HStack w="full">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="ابحث عن أي شيء..."
+                  size="lg"
+                  borderWidth={2}
+                  borderColor="black"
+                  _focus={{ boxShadow: '2px 2px 0 0 black' }}
+                />
+                <Button
+                  type="submit"
+                  size="lg"
+                  bg="black"
+                  color="white"
+                  _hover={{ bg: 'gray.800' }}
+                  px={8}
+                >
+                  🔍 بحث
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="outline"
+                  borderColor="black"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  px={6}
+                >
+                  {showAdvanced ? '▲ إخفاء' : '▼ بحث متقدم'}
+                </Button>
+              </HStack>
+
+              {/* Advanced Filters Panel */}
+              {showAdvanced && (
+                <Box
+                  w="full"
+                  p={6}
+                  borderWidth={2}
+                  borderColor="black"
+                  borderRadius="lg"
+                  bg="gray.50"
+                  boxShadow="4px 4px 0 0 black"
+                >
+                  <VStack gap={4} align="stretch">
+                    <Text fontWeight="bold" fontSize="lg">بحث متقدم</Text>
+                    
+                    {/* Price Range */}
+                    <HStack gap={4}>
+                      <VStack align="stretch" flex={1}>
+                        <Text fontSize="sm" fontWeight="medium">الحد الأدنى للسعر</Text>
+                        <Input
+                          value={minPrice}
+                          onChange={(e) => setMinPrice(e.target.value)}
+                          placeholder="0"
+                          type="number"
+                          borderWidth={2}
+                          borderColor="black"
+                        />
+                      </VStack>
+                      <VStack align="stretch" flex={1}>
+                        <Text fontSize="sm" fontWeight="medium">الحد الأقصى للسعر</Text>
+                        <Input
+                          value={maxPrice}
+                          onChange={(e) => setMaxPrice(e.target.value)}
+                          placeholder="999999"
+                          type="number"
+                          borderWidth={2}
+                          borderColor="black"
+                        />
+                      </VStack>
+                    </HStack>
+
+                    {/* Condition */}
+                    <VStack align="stretch">
+                      <Text fontSize="sm" fontWeight="medium">الحالة</Text>
+                      <HStack gap={2} flexWrap="wrap">
+                        {['', 'NEW', 'LIKE_NEW', 'GOOD', 'FAIR'].map((c) => (
+                          <Button
+                            key={c}
+                            size="sm"
+                            variant={condition === c ? 'solid' : 'outline'}
+                            bg={condition === c ? 'black' : undefined}
+                            color={condition === c ? 'white' : 'black'}
+                            borderColor="black"
+                            onClick={() => setCondition(c)}
+                          >
+                            {c === '' ? 'الكل' : c === 'NEW' ? 'جديد' : c === 'LIKE_NEW' ? 'كالجديد' : c === 'GOOD' ? 'جيد' : 'مقبول'}
+                          </Button>
+                        ))}
+                      </HStack>
+                    </VStack>
+
+                    {/* Sort */}
+                    <VStack align="stretch">
+                      <Text fontSize="sm" fontWeight="medium">ترتيب حسب</Text>
+                      <HStack gap={2} flexWrap="wrap">
+                        {[
+                          { value: 'relevance', label: 'الأكثر صلة' },
+                          { value: 'newest', label: 'الأحدث' },
+                          { value: 'price_asc', label: 'السعر: الأقل' },
+                          { value: 'price_desc', label: 'السعر: الأعلى' },
+                          { value: 'rating', label: 'التقييم' },
+                        ].map((s) => (
+                          <Button
+                            key={s.value}
+                            size="sm"
+                            variant={sort === s.value ? 'solid' : 'outline'}
+                            bg={sort === s.value ? 'black' : undefined}
+                            color={sort === s.value ? 'white' : 'black'}
+                            borderColor="black"
+                            onClick={() => setSort(s.value)}
+                          >
+                            {s.label}
+                          </Button>
+                        ))}
+                      </HStack>
+                    </VStack>
+
+                    {/* Apply / Clear */}
+                    <HStack gap={2}>
+                      <Button
+                        bg="black"
+                        color="white"
+                        _hover={{ bg: 'gray.800' }}
+                        onClick={handleApplyFilters}
+                        flex={1}
+                      >
+                        تطبيق الفلاتر
+                      </Button>
+                      <Button
+                        variant="outline"
+                        borderColor="black"
+                        onClick={handleClearFilters}
+                      >
+                        مسح
+                      </Button>
+                    </HStack>
+                  </VStack>
+                </Box>
+              )}
+            </VStack>
           </Box>
 
           {/* Products Grid */}
@@ -190,5 +342,21 @@ export default function ProductsPage() {
         </VStack>
       </Container>
     </Box>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={
+      <Box minH="100vh" bg="white" py={20}>
+        <Container maxW="7xl">
+          <VStack py={20}>
+            <Spinner size="xl" color="black" />
+          </VStack>
+        </Container>
+      </Box>
+    }>
+      <ProductsContent />
+    </Suspense>
   );
 }

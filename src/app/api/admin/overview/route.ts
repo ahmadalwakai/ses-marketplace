@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAdmin } from '@/lib/rbac';
+import { requireAdminActive } from '@/lib/rbac';
 import { success, handleError } from '@/lib/api-response';
 
 export async function GET() {
   try {
-    await requireAdmin();
+    const admin = await requireAdminActive();
     
     const [
       userCounts,
@@ -16,6 +16,8 @@ export async function GET() {
       reportCounts,
       recentOrders,
       recentUsers,
+      adminSettings,
+      unreadNotifications,
     ] = await Promise.all([
       // User counts by role and status
       prisma.user.groupBy({
@@ -74,6 +76,14 @@ export async function GET() {
           createdAt: true,
         },
       }),
+      // Admin settings (feature flags etc.)
+      prisma.adminSettings.findUnique({
+        where: { id: 'singleton' },
+      }),
+      // Unread notification count
+      prisma.notification.count({
+        where: { userId: admin.id, isRead: false },
+      }),
     ]);
     
     // Process counts into more useful format
@@ -130,6 +140,11 @@ export async function GET() {
       reports,
       recentOrders,
       recentUsers,
+      featureFlags: (adminSettings?.featureFlags as Record<string, unknown>) ?? {},
+      navConfig: (adminSettings?.navConfig as Record<string, unknown>) ?? {},
+      searchConfig: (adminSettings?.searchConfig as Record<string, unknown>) ?? {},
+      cookieConsentConfig: (adminSettings?.cookieConsentConfig as Record<string, unknown>) ?? {},
+      unreadNotifications,
     });
   } catch (err) {
     return handleError(err);

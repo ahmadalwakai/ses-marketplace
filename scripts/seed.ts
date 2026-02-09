@@ -48,11 +48,49 @@ async function main() {
       featureFlags: {
         maxUploadSizeMb: 5,
         allowedMimes: ['image/jpeg', 'image/png', 'image/webp'],
+        sesLive: true,
+        saved: true,
+        smallBusiness: true,
+        advancedSearch: true,
+        cookieConsent: true,
+      },
+      navConfig: {
+        categories: [],
+        showAll: true,
+      },
+      cookieConsentConfig: {
+        analytics: false,
+        marketing: false,
+        functional: true,
+      },
+      searchConfig: {
+        advancedEnabled: true,
+        filtersEnabled: true,
+        suggestionsEnabled: true,
       },
     },
   });
   
   console.log('✅ Admin settings created/updated');
+  
+  // Create welcome notification for admin
+  const existingNotification = await prisma.notification.findFirst({
+    where: { userId: admin.id, type: 'SYSTEM' },
+  });
+  if (!existingNotification) {
+    await prisma.notification.create({
+      data: {
+        userId: admin.id,
+        type: 'SYSTEM',
+        title: 'مرحباً بك في لوحة تحكم SES',
+        message: 'تم إعداد نظام الإدارة بنجاح. يمكنك الآن إدارة الموقع من هنا.',
+        body: 'تم إعداد نظام الإدارة بنجاح. يمكنك الآن إدارة الموقع من هنا.',
+        entityType: 'AdminSettings',
+        entityId: 'singleton',
+      },
+    });
+    console.log('✅ Admin welcome notification created');
+  }
   
   // Create base categories
   const categories = [

@@ -157,6 +157,7 @@ export const productFilterSchema = z.object({
   minRating: z.coerce.number().min(0).max(5).optional(),
   sellerId: z.string().cuid().optional(),
   status: productStatusSchema.optional(),
+  smallBusiness: z.coerce.boolean().optional(),
   sort: z.enum(['newest', 'oldest', 'price_asc', 'price_desc', 'rating', 'relevance']).default('relevance'),
 }).merge(paginationSchema);
 

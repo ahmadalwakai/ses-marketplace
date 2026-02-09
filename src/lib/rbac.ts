@@ -118,6 +118,17 @@ export async function requireAdmin(): Promise<AuthUser> {
 }
 
 /**
+ * Require the user to be an active admin (combined check)
+ */
+export async function requireAdminActive(): Promise<AuthUser> {
+  const user = await requireRole(['ADMIN']);
+  if (user.status !== 'ACTIVE') {
+    throw new AuthError('حسابك غير مفعل', 'ACCOUNT_INACTIVE', 403);
+  }
+  return user;
+}
+
+/**
  * Require the user to be a seller (with an active profile)
  */
 export async function requireSeller(): Promise<AuthUser & { sellerId: string }> {

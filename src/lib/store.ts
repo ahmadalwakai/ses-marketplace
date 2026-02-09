@@ -190,13 +190,17 @@ interface SearchStore {
     minPrice?: number;
     maxPrice?: number;
     condition?: string;
+    sort?: string;
   };
   suggestions: { id: string; title: string; slug: string; image?: string }[];
   isSearching: boolean;
+  showAdvanced: boolean;
   setQuery: (query: string) => void;
   setFilters: (filters: SearchStore['filters']) => void;
   setSuggestions: (suggestions: SearchStore['suggestions']) => void;
   setIsSearching: (isSearching: boolean) => void;
+  setShowAdvanced: (show: boolean) => void;
+  toggleAdvanced: () => void;
   clearFilters: () => void;
   clearSuggestions: () => void;
 }
@@ -206,10 +210,94 @@ export const useSearchStore = create<SearchStore>((set) => ({
   filters: {},
   suggestions: [],
   isSearching: false,
+  showAdvanced: false,
   setQuery: (query) => set({ query }),
   setFilters: (filters) => set((state) => ({ filters: { ...state.filters, ...filters } })),
   setSuggestions: (suggestions) => set({ suggestions }),
   setIsSearching: (isSearching) => set({ isSearching }),
+  setShowAdvanced: (show) => set({ showAdvanced: show }),
+  toggleAdvanced: () => set((state) => ({ showAdvanced: !state.showAdvanced })),
   clearFilters: () => set({ filters: {} }),
   clearSuggestions: () => set({ suggestions: [] }),
 }));
+
+// Category menu store
+interface CategoryMenuItem {
+  id: string;
+  name: string;
+  nameAr: string | null;
+  slug: string;
+  children: CategoryMenuItem[];
+}
+
+interface CategoryMenuStore {
+  categories: CategoryMenuItem[];
+  isOpen: boolean;
+  expandedIds: string[];
+  isLoading: boolean;
+  setCategories: (categories: CategoryMenuItem[]) => void;
+  setIsOpen: (open: boolean) => void;
+  toggleOpen: () => void;
+  toggleExpanded: (id: string) => void;
+  setIsLoading: (loading: boolean) => void;
+}
+
+export const useCategoryMenuStore = create<CategoryMenuStore>((set) => ({
+  categories: [],
+  isOpen: false,
+  expandedIds: [],
+  isLoading: false,
+  setCategories: (categories) => set({ categories }),
+  setIsOpen: (open) => set({ isOpen: open }),
+  toggleOpen: () => set((state) => ({ isOpen: !state.isOpen })),
+  toggleExpanded: (id) =>
+    set((state) => ({
+      expandedIds: state.expandedIds.includes(id)
+        ? state.expandedIds.filter((i) => i !== id)
+        : [...state.expandedIds, id],
+    })),
+  setIsLoading: (loading) => set({ isLoading: loading }),
+}));
+
+// Saved items store (for visitors - local storage, works without account)
+interface SavedItem {
+  productId: string;
+  title: string;
+  titleAr?: string;
+  price: number;
+  image?: string;
+  slug: string;
+  savedAt: number;
+}
+
+interface SavedStore {
+  items: SavedItem[];
+  addItem: (item: Omit<SavedItem, 'savedAt'>) => void;
+  removeItem: (productId: string) => void;
+  isSaved: (productId: string) => boolean;
+  clearSaved: () => void;
+}
+
+export const useSavedStore = create<SavedStore>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      addItem: (item) => {
+        const items = get().items;
+        if (!items.find((i) => i.productId === item.productId)) {
+          set({ items: [...items, { ...item, savedAt: Date.now() }] });
+        }
+      },
+      removeItem: (productId) => {
+        set({ items: get().items.filter((i) => i.productId !== productId) });
+      },
+      isSaved: (productId) => {
+        return get().items.some((i) => i.productId === productId);
+      },
+      clearSaved: () => set({ items: [] }),
+    }),
+    {
+      name: 'ses-saved',
+    }
+  )
+);

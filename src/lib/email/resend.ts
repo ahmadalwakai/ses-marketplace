@@ -396,6 +396,40 @@ export async function sendDisputeEscalatedEmail(
   });
 }
 
+// ============================================
+// ADMIN CRITICAL EVENT EMAILS
+// ============================================
+
+const SUPER_ADMIN_EMAIL = 'ahmadalwakai76@gmail.com';
+
+export async function sendAdminCriticalEventEmail(
+  type: string,
+  title: string,
+  body: string,
+  entityType?: string,
+  entityId?: string
+) {
+  const entityLink = entityType && entityId
+    ? `<p><strong>النوع:</strong> ${entityType} | <strong>المعرّف:</strong> ${entityId}</p>`
+    : '';
+
+  const html = baseTemplate(`
+    <h2>🔔 تنبيه إداري: ${title}</h2>
+    <p><strong>النوع:</strong> ${type}</p>
+    <p>${body}</p>
+    ${entityLink}
+    <a href="${process.env.NEXTAUTH_URL}/admin" class="button">لوحة التحكم</a>
+  `);
+
+  return sendEmail({
+    to: SUPER_ADMIN_EMAIL,
+    subject: `[SES Admin] ${title}`,
+    html,
+  }).catch((err) => {
+    console.error('Failed to send admin critical email:', err);
+  });
+}
+
 export default {
   sendEmail,
   sendWelcomeEmail,
@@ -413,4 +447,5 @@ export default {
   sendAccountActivatedEmail,
   sendSellerVerificationApprovedEmail,
   sendSellerVerificationRejectedEmail,
+  sendAdminCriticalEventEmail,
 };

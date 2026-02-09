@@ -8,21 +8,25 @@ import {
   Heading,
   Text,
   VStack,
+  HStack,
   SimpleGrid,
   Spinner,
+  Button,
 } from '@chakra-ui/react';
 
 interface Category {
   id: string;
   name: string;
+  nameAr: string | null;
   slug: string;
-  description: string | null;
-  _count: { products: number };
+  sortOrder: number;
+  children: Category[];
 }
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchCategories();
@@ -40,6 +44,12 @@ export default function CategoriesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
   };
 
   if (loading) {
@@ -60,12 +70,26 @@ export default function CategoriesPage() {
         <VStack gap={8} align="stretch">
           <VStack gap={2} textAlign="center">
             <Heading size="2xl" color="black">
-              الفئات
+              كل الفئات
             </Heading>
             <Text color="gray.600">
-              تصفح المنتجات حسب الفئة
+              تسوق حسب الفئة - اختر التصنيف المناسب
             </Text>
           </VStack>
+
+          {/* Search + Advanced links */}
+          <HStack justify="center" gap={4}>
+            <Link href="/products">
+              <Button size="md" bg="black" color="white" _hover={{ bg: 'gray.800' }}>
+                🔍 ابحث عن أي شيء
+              </Button>
+            </Link>
+            <Link href="/products?advanced=true">
+              <Button size="md" variant="outline" borderColor="black">
+                بحث متقدم
+              </Button>
+            </Link>
+          </HStack>
 
           {categories.length === 0 ? (
             <Box className="neon-card" p={8} textAlign="center">
@@ -74,43 +98,67 @@ export default function CategoriesPage() {
           ) : (
             <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} gap={6}>
               {categories.map((category) => (
-                <Link key={category.id} href={`/products?category=${category.slug}`}>
-                  <Box
-                    className="neon-card"
-                    p={6}
-                    cursor="pointer"
-                    transition="all 0.2s"
-                    _hover={{ transform: 'translateY(-4px)' }}
-                    textAlign="center"
-                  >
-                    <VStack gap={3}>
-                      <Box
-                        w="80px"
-                        h="80px"
-                        bg="gray.100"
-                        borderRadius="xl"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <Text fontSize="3xl">📦</Text>
-                      </Box>
-                      <VStack gap={1}>
-                        <Heading size="md" color="black">
-                          {category.name}
+                <Box
+                  key={category.id}
+                  className="neon-card"
+                  p={6}
+                  transition="all 0.2s"
+                  _hover={{ transform: 'translateY(-4px)' }}
+                >
+                  <VStack gap={3} align="stretch">
+                    <Link href={`/categories/${category.slug}`}>
+                      <Box cursor="pointer" textAlign="center">
+                        <Box
+                          w="80px"
+                          h="80px"
+                          bg="gray.100"
+                          borderRadius="xl"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          mx="auto"
+                        >
+                          <Text fontSize="3xl">📦</Text>
+                        </Box>
+                        <Heading size="md" color="black" mt={2}>
+                          {category.nameAr || category.name}
                         </Heading>
-                        {category.description && (
-                          <Text fontSize="sm" color="gray.600" lineClamp={2}>
-                            {category.description}
-                          </Text>
+                      </Box>
+                    </Link>
+
+                    {/* Expandable children */}
+                    {category.children && category.children.length > 0 && (
+                      <>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => toggleExpanded(category.id)}
+                          color="gray.500"
+                        >
+                          {expandedIds.includes(category.id) ? '▲ إخفاء' : `▼ ${category.children.length} تصنيف فرعي`}
+                        </Button>
+                        {expandedIds.includes(category.id) && (
+                          <VStack align="stretch" gap={1} pl={2} borderRightWidth={2} borderColor="gray.200">
+                            {category.children.map((sub) => (
+                              <Link key={sub.id} href={`/categories/${sub.slug}`}>
+                                <Box
+                                  p={2}
+                                  _hover={{ bg: 'gray.50' }}
+                                  borderRadius="md"
+                                  cursor="pointer"
+                                >
+                                  <Text fontSize="sm" color="gray.700">
+                                    {sub.nameAr || sub.name}
+                                  </Text>
+                                </Box>
+                              </Link>
+                            ))}
+                          </VStack>
                         )}
-                        <Text fontSize="sm" color="gray.500">
-                          {category._count.products} منتج
-                        </Text>
-                      </VStack>
-                    </VStack>
-                  </Box>
-                </Link>
+                      </>
+                    )}
+                  </VStack>
+                </Box>
               ))}
             </SimpleGrid>
           )}

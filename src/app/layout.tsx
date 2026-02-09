@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Providers } from './providers';
 import Navbar from '@/components/Navbar';
+import CookieConsent from '@/components/CookieConsent';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({
         <Providers>
           <Navbar />
           {children}
+          <CookieConsent />
         </Providers>
       </body>
     </html>

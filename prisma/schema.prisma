@@ -156,11 +156,11 @@ model PasswordResetToken {
 }
 
 model RateLimitEntry {
-  id         String   @id @default(cuid())
-  key        String   @unique
-  count      Int      @default(1)
-  lastReset  DateTime @default(now())
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  key       String   @unique
+  count     Int      @default(1)
+  lastReset DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([key])
   @@index([lastReset])
@@ -182,18 +182,18 @@ model User {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  accounts       Account[]
-  sessions       Session[]
-  sellerProfile  SellerProfile?
-  orders         Order[]        @relation("CustomerOrders")
-  reviews        Review[]
-  disputes       Dispute[]      @relation("DisputeOpener")
+  accounts        Account[]
+  sessions        Session[]
+  sellerProfile   SellerProfile?
+  orders          Order[]          @relation("CustomerOrders")
+  reviews         Review[]
+  disputes        Dispute[]        @relation("DisputeOpener")
   disputeMessages DisputeMessage[]
-  reports        Report[]
-  auditLogs      AuditLog[]
-  aiLogs         AiLog[]
-  uploadSessions UploadSession[]
-  notifications  Notification[]
+  reports         Report[]
+  auditLogs       AuditLog[]
+  aiLogs          AiLog[]
+  uploadSessions  UploadSession[]
+  notifications   Notification[]
 
   @@index([email])
   @@index([role])
@@ -330,7 +330,7 @@ model Order {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  customer User @relation("CustomerOrders", fields: [customerId], references: [id])
+  customer User          @relation("CustomerOrders", fields: [customerId], references: [id])
   seller   SellerProfile @relation("SellerOrders", fields: [sellerId], references: [id])
   items    OrderItem[]
   reviews  Review[]
@@ -446,10 +446,13 @@ model Report {
 model AdminSettings {
   id                   String   @id @default("singleton")
   freeMode             Boolean  @default(false)
-  globalCommissionRate Decimal  @db.Decimal(5, 4) @default(0.05)
+  globalCommissionRate Decimal  @default(0.05) @db.Decimal(5, 4)
   rankingWeights       Json     @default("{\"w_recency\": 0.3, \"w_rating\": 0.25, \"w_orders\": 0.2, \"w_stock\": 0.15, \"w_sellerRep\": 0.1}")
   seoTemplates         Json     @default("{}")
-  featureFlags         Json     @default("{\"maxUploadSizeMb\": 5, \"allowedMimes\": [\"image/jpeg\", \"image/png\", \"image/webp\"]}")
+  featureFlags         Json     @default("{\"maxUploadSizeMb\": 5, \"allowedMimes\": [\"image/jpeg\", \"image/png\", \"image/webp\"], \"sesLive\": true, \"saved\": true, \"smallBusiness\": true, \"advancedSearch\": true, \"cookieConsent\": true}")
+  navConfig            Json     @default("{\"categories\": [], \"showAll\": true}")
+  cookieConsentConfig  Json     @default("{\"analytics\": false, \"marketing\": false, \"functional\": true}")
+  searchConfig         Json     @default("{\"advancedEnabled\": true, \"filtersEnabled\": true, \"suggestionsEnabled\": true}")
   updatedAt            DateTime @updatedAt
 }
 
@@ -545,17 +548,23 @@ model UploadSession {
 // ============================================
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  type      String
-  title     String
-  message   String
-  link      String?
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  message    String
+  body       String?
+  link       String?
+  entityType String?
+  entityId   String?
+  read       Boolean  @default(false)
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, read])
+  @@index([userId, isRead])
   @@index([userId, createdAt])
+  @@index([entityType, entityId])
 }

@@ -10,12 +10,19 @@ export async function GET(request: NextRequest) {
     const params = Object.fromEntries(searchParams.entries());
     const filters = productFilterSchema.parse(params);
     
-    const { page, limit, q, categoryId, condition, minPrice, maxPrice, minRating, sellerId, sort } = filters;
+    const { page, limit, q, categoryId, condition, minPrice, maxPrice, minRating, sellerId, smallBusiness, sort } = filters;
     
     // Build where clause
     const where: Prisma.ProductWhereInput = {
       status: 'ACTIVE',
     };
+    
+    // Small Business filter: products from verified (approved) sellers
+    if (smallBusiness) {
+      where.seller = {
+        verificationStatus: 'APPROVED',
+      };
+    }
     
     if (q) {
       where.OR = [

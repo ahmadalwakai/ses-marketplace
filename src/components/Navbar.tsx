@@ -14,7 +14,7 @@ import {
   Input,
   Spinner,
 } from '@chakra-ui/react';
-import { useWishlistStore, useCompareStore, useUIStore, useSearchStore } from '@/lib/store';
+import { useWishlistStore, useCompareStore, useUIStore, useSearchStore, useCategoryMenuStore, useSavedStore } from '@/lib/store';
 
 interface Notification {
   id: string;
@@ -42,7 +42,9 @@ export default function Navbar() {
   const wishlistItems = useWishlistStore((state) => state.items);
   const compareItems = useCompareStore((state) => state.items);
   const { mobileMenuOpen, setMobileMenuOpen } = useUIStore();
-  const { query, setQuery, suggestions, setSuggestions, isSearching, setIsSearching, clearSuggestions } = useSearchStore();
+  const { query, setQuery, suggestions, setSuggestions, isSearching, setIsSearching, clearSuggestions, showAdvanced, toggleAdvanced } = useSearchStore();
+  const savedItems = useSavedStore((state) => state.items);
+  const { categories: menuCategories, isOpen: categoryMenuOpen, expandedIds, isLoading: categoriesLoading, setCategories: setMenuCategories, setIsOpen: setCategoryMenuOpen, toggleOpen: toggleCategoryMenu, toggleExpanded, setIsLoading: setCategoriesLoading } = useCategoryMenuStore();
   
   const [localQuery, setLocalQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -54,6 +56,27 @@ export default function Navbar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
+
+  // Fetch categories for menu
+  useEffect(() => {
+    const fetchCategories = async () => {
+      if (menuCategories.length > 0) return;
+      setCategoriesLoading(true);
+      try {
+        const res = await fetch('/api/categories');
+        const data = await res.json();
+        if (data.success) {
+          setMenuCategories(data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+      } finally {
+        setCategoriesLoading(false);
+      }
+    };
+    fetchCategories();
+  }, [menuCategories.length, setMenuCategories, setCategoriesLoading]);
 
   // Fetch notifications
   useEffect(() => {
@@ -110,16 +133,19 @@ export default function Navbar() {
     }
   };
 
-  // Close notifications on click outside
+  // Close notifications/category menu on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
         setShowNotifications(false);
       }
+      if (categoryMenuRef.current && !categoryMenuRef.current.contains(e.target as Node)) {
+        setCategoryMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [setCategoryMenuOpen]);
 
   // Fetch autocomplete suggestions
   useEffect(() => {
@@ -200,20 +226,154 @@ export default function Navbar() {
 
               {/* Desktop Nav Links */}
               <HStack gap={4} display={{ base: 'none', md: 'flex' }}>
+                {/* Shop by Category dropdown */}
+                <Box ref={categoryMenuRef} position="relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleCategoryMenu()}
+                    color="black"
+                    fontWeight="medium"
+                  >
+                    <Text fontSize="sm">📂 تسوق حسب الفئة</Text>
+                    <Text fontSize="xs" ml={1}>{categoryMenuOpen ? '▲' : '▼'}</Text>
+                  </Button>
+
+                  {categoryMenuOpen && (
+                    <Box
+                      position="absolute"
+                      top="100%"
+                      right={0}
+                      w="280px"
+                      bg="white"
+                      borderWidth={2}
+                      borderColor="black"
+                      borderRadius="lg"
+                      boxShadow="4px 4px 0 0 black"
+                      zIndex={300}
+                      maxH="400px"
+                      overflowY="auto"
+                    >
+                      <HStack p={3} borderBottomWidth={1} borderColor="gray.200" justify="space-between">
+                        <Text fontWeight="bold" fontSize="sm">تسوق حسب الفئة</Text>
+                        <Link href="/categories" onClick={() => setCategoryMenuOpen(false)}>
+                          <Text fontSize="xs" color="blue.600" _hover={{ textDecoration: 'underline' }}>
+                            كل الفئات
+                          </Text>
+                        </Link>
+                      </HStack>
+                      {categoriesLoading ? (
+                        <HStack p={4} justify="center"><Spinner size="sm" /></HStack>
+                      ) : (
+                        <VStack align="stretch" gap={0}>
+                          {menuCategories.map((cat) => (
+                            <Box key={cat.id}>
+                              <HStack
+                                p={3}
+                                cursor="pointer"
+                                _hover={{ bg: 'gray.50' }}
+                                justify="space-between"
+                              >
+                                <Link
+                                  href={`/categories/${cat.slug}`}
+                                  onClick={() => setCategoryMenuOpen(false)}
+                                  style={{ flex: 1 }}
+                                >
+                                  <Text fontSize="sm" color="black">
+                                    {cat.nameAr || cat.name}
+                                  </Text>
+                                </Link>
+                                {cat.children && cat.children.length > 0 && (
+                                  <Text
+                                    fontSize="xs"
+                                    color="gray.400"
+                                    cursor="pointer"
+                                    onClick={(e) => { e.stopPropagation(); toggleExpanded(cat.id); }}
+                                    px={2}
+                                  >
+                                    {expandedIds.includes(cat.id) ? '▲' : '▼'}
+                                  </Text>
+                                )}
+                              </HStack>
+                              {expandedIds.includes(cat.id) && cat.children && (
+                                <VStack align="stretch" gap={0} pl={4} bg="gray.50">
+                                  {cat.children.map((sub) => (
+                                    <Link
+                                      key={sub.id}
+                                      href={`/categories/${sub.slug}`}
+                                      onClick={() => setCategoryMenuOpen(false)}
+                                    >
+                                      <Box p={2} _hover={{ bg: 'gray.100' }}>
+                                        <Text fontSize="xs" color="gray.700">
+                                          {sub.nameAr || sub.name}
+                                        </Text>
+                                      </Box>
+                                    </Link>
+                                  ))}
+                                </VStack>
+                              )}
+                            </Box>
+                          ))}
+                        </VStack>
+                      )}
+                    </Box>
+                  )}
+                </Box>
+
+                <Link href="/categories">
+                  <Text color="black" _hover={{ textDecoration: 'underline' }}>
+                    كل الفئات
+                  </Text>
+                </Link>
                 <Link href="/products">
                   <Text color="black" _hover={{ textDecoration: 'underline' }}>
                     المنتجات
                   </Text>
                 </Link>
-                <Link href="/categories">
-                  <Text color="black" _hover={{ textDecoration: 'underline' }}>
-                    الفئات
+                <Link href="/small-business">
+                  <Text color="green.600" fontWeight="bold" _hover={{ textDecoration: 'underline' }}>
+                    🏪 أعمال صغيرة
+                  </Text>
+                </Link>
+                <Link href="/ses-live">
+                  <Text color="red.500" fontWeight="bold" _hover={{ textDecoration: 'underline' }}>
+                    🔴 SES Live
                   </Text>
                 </Link>
               </HStack>
 
               {/* Icons + Auth */}
               <HStack gap={2}>
+                {/* Saved (local wishlist for visitors) */}
+                <Link href="/wishlist">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    position="relative"
+                    aria-label="المحفوظات"
+                  >
+                    <Text fontSize="lg">🔖</Text>
+                    {savedItems.length > 0 && (
+                      <Box
+                        position="absolute"
+                        top="-1"
+                        right="-1"
+                        bg="black"
+                        color="white"
+                        fontSize="xs"
+                        w="18px"
+                        h="18px"
+                        borderRadius="full"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        {savedItems.length}
+                      </Box>
+                    )}
+                  </Button>
+                </Link>
+
                 {/* Wishlist */}
                 <Link href="/wishlist">
                   <Button
@@ -435,7 +595,7 @@ export default function Navbar() {
                       setShowSuggestions(true);
                     }}
                     onFocus={() => setShowSuggestions(true)}
-                    placeholder="ابحث عن منتج..."
+                    placeholder="ابحث عن أي شيء..."
                     size={{ base: 'md', md: 'lg' }}
                     borderWidth={2}
                     borderColor="black"
@@ -450,7 +610,26 @@ export default function Navbar() {
                     _hover={{ bg: 'gray.800' }}
                     px={{ base: 4, md: 8 }}
                   >
-                    بحث
+                    🔍 بحث
+                  </Button>
+                  <Button
+                    type="button"
+                    size={{ base: 'md', md: 'lg' }}
+                    variant="outline"
+                    borderColor="black"
+                    color="black"
+                    _hover={{ bg: 'gray.100' }}
+                    px={{ base: 3, md: 6 }}
+                    onClick={() => {
+                      toggleAdvanced();
+                      if (localQuery.trim()) {
+                        router.push(`/products?q=${encodeURIComponent(localQuery.trim())}&advanced=true`);
+                      } else {
+                        router.push('/products?advanced=true');
+                      }
+                    }}
+                  >
+                    بحث متقدم
                   </Button>
                 </HStack>
               </form>
@@ -561,13 +740,40 @@ export default function Navbar() {
                 </Link>
                 <Link href="/categories" onClick={() => setMobileMenuOpen(false)}>
                   <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
-                    <Text>الفئات</Text>
+                    <Text>📂 كل الفئات</Text>
+                  </Box>
+                </Link>
+                <Link href="/products?advanced=true" onClick={() => setMobileMenuOpen(false)}>
+                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                    <Text>🔍 بحث متقدم</Text>
+                  </Box>
+                </Link>
+                <Link href="/small-business" onClick={() => setMobileMenuOpen(false)}>
+                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                    <Text color="green.600" fontWeight="bold">🏪 أعمال صغيرة</Text>
+                  </Box>
+                </Link>
+                <Link href="/ses-live" onClick={() => setMobileMenuOpen(false)}>
+                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                    <Text color="red.500" fontWeight="bold">🔴 SES Live</Text>
                   </Box>
                 </Link>
                 <Link href="/wishlist" onClick={() => setMobileMenuOpen(false)}>
                   <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
                     <HStack justify="space-between">
-                      <Text>المفضلة</Text>
+                      <Text>🔖 المحفوظات</Text>
+                      {savedItems.length > 0 && (
+                        <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
+                          {savedItems.length}
+                        </Text>
+                      )}
+                    </HStack>
+                  </Box>
+                </Link>
+                <Link href="/wishlist" onClick={() => setMobileMenuOpen(false)}>
+                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                    <HStack justify="space-between">
+                      <Text>♡ المفضلة</Text>
                       {wishlistItems.length > 0 && (
                         <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
                           {wishlistItems.length}
@@ -579,7 +785,7 @@ export default function Navbar() {
                 <Link href="/compare" onClick={() => setMobileMenuOpen(false)}>
                   <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
                     <HStack justify="space-between">
-                      <Text>المقارنة</Text>
+                      <Text>⚖ المقارنة</Text>
                       {compareItems.length > 0 && (
                         <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
                           {compareItems.length}

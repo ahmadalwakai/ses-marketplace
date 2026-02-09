@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { requireAdmin } from '@/lib/rbac';
+import prisma, { createAuditLog, notifyAdmins } from '@/lib/prisma';
+import { requireAdminActive } from '@/lib/rbac';
 import { updateUserStatusSchema } from '@/lib/validations';
 import { success, error, handleError } from '@/lib/api-response';
 import { sendAccountSuspendedEmail, sendAccountBannedEmail, sendAccountActivatedEmail } from '@/lib/email/resend';
@@ -11,7 +11,7 @@ interface Props {
 
 export async function PATCH(request: NextRequest, { params }: Props) {
   try {
-    const admin = await requireAdmin();
+    const admin = await requireAdminActive();
     const { id } = await params;
     const body = await request.json();
     const { status } = updateUserStatusSchema.parse({ ...body, id });
@@ -51,17 +51,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     });
     
     // Log the action
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.id,
-        action: 'UPDATE_USER_STATUS',
-        entityType: 'User',
-        entityId: id,
-        metadata: {
-          previousStatus,
-          newStatus: status,
-        },
-      },
+    await createAuditLog({
+      adminId: admin.id,
+      action: 'UPDATE_USER_STATUS',
+      entityType: 'User',
+      entityId: id,
+      metadata: { previousStatus, newStatus: status },
     });
     
     // Send email notification
