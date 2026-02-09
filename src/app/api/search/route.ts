@@ -1,12 +1,58 @@
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { productFilterSchema } from '@/lib/validations';
-import { paginated, handleError, paginationMeta } from '@/lib/api-response';
+import { paginated, handleError, paginationMeta, success } from '@/lib/api-response';
 import type { Prisma } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const mode = searchParams.get('mode');
+    
+    // Handle autocomplete mode
+    if (mode === 'autocomplete') {
+      const q = searchParams.get('q') || '';
+      const limit = Math.min(parseInt(searchParams.get('limit') || '5'), 10);
+      
+      if (q.length < 2) {
+        return success([]);
+      }
+      
+      const products = await prisma.product.findMany({
+        where: {
+          status: 'ACTIVE',
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { titleAr: { contains: q, mode: 'insensitive' } },
+            { brand: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          title: true,
+          titleAr: true,
+          slug: true,
+          images: {
+            select: { url: true },
+            take: 1,
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+        take: limit,
+        orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
+      });
+      
+      const suggestions = products.map((p) => ({
+        id: p.id,
+        title: p.titleAr || p.title,
+        slug: p.slug,
+        image: p.images[0]?.url || null,
+      }));
+      
+      return success(suggestions);
+    }
+    
+    // Regular search
     const params = Object.fromEntries(searchParams.entries());
     const filters = productFilterSchema.parse(params);
     

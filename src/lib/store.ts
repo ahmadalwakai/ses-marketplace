@@ -63,17 +63,123 @@ export const useCartStore = create<CartStore>()(
   )
 );
 
+// Wishlist store
+interface WishlistItem {
+  productId: string;
+  title: string;
+  titleAr?: string;
+  price: number;
+  image?: string;
+  slug: string;
+  addedAt: number;
+}
+
+interface WishlistStore {
+  items: WishlistItem[];
+  addItem: (item: Omit<WishlistItem, 'addedAt'>) => void;
+  removeItem: (productId: string) => void;
+  isInWishlist: (productId: string) => boolean;
+  clearWishlist: () => void;
+}
+
+export const useWishlistStore = create<WishlistStore>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      addItem: (item) => {
+        const items = get().items;
+        if (!items.find((i) => i.productId === item.productId)) {
+          set({ items: [...items, { ...item, addedAt: Date.now() }] });
+        }
+      },
+      removeItem: (productId) => {
+        set({ items: get().items.filter((i) => i.productId !== productId) });
+      },
+      isInWishlist: (productId) => {
+        return get().items.some((i) => i.productId === productId);
+      },
+      clearWishlist: () => set({ items: [] }),
+    }),
+    {
+      name: 'ses-wishlist',
+    }
+  )
+);
+
+// Compare store (max 4 items)
+interface CompareItem {
+  productId: string;
+  title: string;
+  titleAr?: string;
+  price: number;
+  image?: string;
+  slug: string;
+  condition: string;
+  category?: string;
+  seller?: string;
+  rating?: number;
+}
+
+interface CompareStore {
+  items: CompareItem[];
+  addItem: (item: CompareItem) => boolean;
+  removeItem: (productId: string) => void;
+  isInCompare: (productId: string) => boolean;
+  clearCompare: () => void;
+}
+
+export const useCompareStore = create<CompareStore>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      addItem: (item) => {
+        const items = get().items;
+        if (items.length >= 4) {
+          return false; // Max 4 items
+        }
+        if (!items.find((i) => i.productId === item.productId)) {
+          set({ items: [...items, item] });
+          return true;
+        }
+        return false;
+      },
+      removeItem: (productId) => {
+        set({ items: get().items.filter((i) => i.productId !== productId) });
+      },
+      isInCompare: (productId) => {
+        return get().items.some((i) => i.productId === productId);
+      },
+      clearCompare: () => set({ items: [] }),
+    }),
+    {
+      name: 'ses-compare',
+    }
+  )
+);
+
 // UI store for general app state
 interface UIStore {
   sidebarOpen: boolean;
+  mobileMenuOpen: boolean;
+  mobileFiltersOpen: boolean;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
+  toggleMobileMenu: () => void;
+  setMobileMenuOpen: (open: boolean) => void;
+  toggleMobileFilters: () => void;
+  setMobileFiltersOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: false,
+  mobileMenuOpen: false,
+  mobileFiltersOpen: false,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  toggleMobileMenu: () => set((state) => ({ mobileMenuOpen: !state.mobileMenuOpen })),
+  setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
+  toggleMobileFilters: () => set((state) => ({ mobileFiltersOpen: !state.mobileFiltersOpen })),
+  setMobileFiltersOpen: (open) => set({ mobileFiltersOpen: open }),
 }));
 
 // Search store
@@ -85,15 +191,25 @@ interface SearchStore {
     maxPrice?: number;
     condition?: string;
   };
+  suggestions: { id: string; title: string; slug: string; image?: string }[];
+  isSearching: boolean;
   setQuery: (query: string) => void;
   setFilters: (filters: SearchStore['filters']) => void;
+  setSuggestions: (suggestions: SearchStore['suggestions']) => void;
+  setIsSearching: (isSearching: boolean) => void;
   clearFilters: () => void;
+  clearSuggestions: () => void;
 }
 
 export const useSearchStore = create<SearchStore>((set) => ({
   query: '',
   filters: {},
+  suggestions: [],
+  isSearching: false,
   setQuery: (query) => set({ query }),
   setFilters: (filters) => set((state) => ({ filters: { ...state.filters, ...filters } })),
+  setSuggestions: (suggestions) => set({ suggestions }),
+  setIsSearching: (isSearching) => set({ isSearching }),
   clearFilters: () => set({ filters: {} }),
+  clearSuggestions: () => set({ suggestions: [] }),
 }));

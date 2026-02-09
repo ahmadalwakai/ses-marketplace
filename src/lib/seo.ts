@@ -93,6 +93,48 @@ export function generateOrganizationJsonLd(): object {
   };
 }
 
+export function generateStoreJsonLd(
+  store: SellerProfile & {
+    user?: { name: string | null };
+    _count?: { products: number };
+  }
+): object {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Store',
+    name: store.storeName,
+    description: store.bio || `متجر ${store.storeName} - سوريا للتسوق الإلكتروني`,
+    url: `${SITE_URL}/stores/${store.slug}`,
+    aggregateRating: store.ratingCount > 0 ? {
+      '@type': 'AggregateRating',
+      ratingValue: store.ratingAvg.toFixed(1),
+      ratingCount: store.ratingCount,
+      bestRating: 5,
+      worstRating: 1,
+    } : undefined,
+  };
+}
+
+export function generateCategoryJsonLd(
+  category: Category & {
+    _count?: { products: number };
+    children?: Category[];
+  }
+): object {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: category.nameAr || category.name,
+    url: `${SITE_URL}/categories/${category.slug}`,
+    description: `تسوق أفضل منتجات ${category.nameAr || category.name} في سوريا`,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: SITE_NAME,
+      url: SITE_URL,
+    },
+  };
+}
+
 // ============================================
 // SITEMAP GENERATION
 // ============================================
