@@ -131,11 +131,8 @@ export async function POST(request: NextRequest) {
       });
       
       // Build reset URL
-      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-      const resetUrl = `${baseUrl}/auth/reset-password?token=${rawToken}`;
-      
       // Send email (don't await to avoid timing attacks)
-      sendPasswordResetEmail(user.email, resetUrl).catch(console.error);
+      sendPasswordResetEmail(user.email, rawToken).catch(console.error);
     }
     
     // Always return success to prevent user enumeration

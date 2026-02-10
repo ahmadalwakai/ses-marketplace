@@ -1,8 +1,21 @@
 import { Resend } from 'resend';
+import { absoluteUrl } from '@/lib/url/baseUrl';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = process.env.EMAIL_FROM || 'SES <noreply@ses.example.com>';
+const VERIFIED_DOMAIN = 'ses-marketplace.com';
+
+function getFromEmail(): string {
+  const fromEmail = process.env.RESEND_FROM_EMAIL;
+  if (!fromEmail || !fromEmail.includes(`@${VERIFIED_DOMAIN}`)) {
+    throw new Error(
+      `RESEND_FROM_EMAIL is missing or not using @${VERIFIED_DOMAIN}. ` +
+      `Set RESEND_FROM_EMAIL="no-reply@${VERIFIED_DOMAIN}" in your .env file.`
+    );
+  }
+  const fromName = process.env.RESEND_FROM_NAME || 'SES Marketplace';
+  return `${fromName} <${fromEmail}>`;
+}
 
 export interface EmailOptions {
   to: string | string[];
@@ -17,7 +30,7 @@ export interface EmailOptions {
 export async function sendEmail(options: EmailOptions): Promise<{ id: string }> {
   try {
     const result = await resend.emails.send({
-      from: FROM_EMAIL,
+      from: getFromEmail(),
       to: options.to,
       subject: options.subject,
       html: options.html,
@@ -115,7 +128,7 @@ export async function sendWelcomeEmail(to: string, name: string) {
     <h2>مرحباً ${name}!</h2>
     <p>شكراً لتسجيلك في سوريا للتسوق الإلكتروني.</p>
     <p>يمكنك الآن تصفح المنتجات والبدء بالتسوق.</p>
-    <a href="${process.env.NEXTAUTH_URL}" class="button">ابدأ التسوق</a>
+    <a href="${absoluteUrl('/')}" class="button">ابدأ التسوق</a>
   `);
   
   return sendEmail({
@@ -140,7 +153,7 @@ export async function sendWelcomeEmailWithRole(to: string, name: string, role: s
     <p>شكراً لتسجيلك في سوريا للتسوق الإلكتروني.</p>
     <p>تم إنشاء حسابك بنجاح بصفة <strong>${roleNameAr}</strong>.</p>
     <p>يمكنك الآن تصفح المنتجات والبدء بالتسوق.</p>
-    <a href="${process.env.NEXTAUTH_URL}" class="button">ابدأ الآن</a>
+    <a href="${absoluteUrl('/')}" class="button">ابدأ الآن</a>
   `);
   
   return sendEmail({
@@ -150,7 +163,8 @@ export async function sendWelcomeEmailWithRole(to: string, name: string, role: s
   });
 }
 
-export async function sendPasswordResetEmail(to: string, resetUrl: string) {
+export async function sendPasswordResetEmail(to: string, token: string) {
+  const resetUrl = absoluteUrl(`/auth/reset-password?token=${token}`);
   const html = baseTemplate(`
     <h2>إعادة تعيين كلمة المرور</h2>
     <p>تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك.</p>
@@ -172,7 +186,7 @@ export async function sendPasswordResetSuccessEmail(to: string) {
     <h2>تم تغيير كلمة المرور</h2>
     <p>تم تغيير كلمة المرور الخاصة بحسابك بنجاح.</p>
     <p>إذا لم تقم بهذا التغيير، يرجى التواصل معنا فوراً.</p>
-    <a href="${process.env.NEXTAUTH_URL}/auth/login" class="button">تسجيل الدخول</a>
+    <a href="${absoluteUrl('/auth/login')}" class="button">تسجيل الدخول</a>
   `);
   
   return sendEmail({
@@ -203,7 +217,7 @@ export async function sendOrderPlacedEmail(
     <ul>${itemsList}</ul>
     <p><strong>المجموع: ${orderTotal}</strong></p>
     <p>سيتواصل معك البائع لترتيب التسليم والدفع نقداً.</p>
-    <a href="${process.env.NEXTAUTH_URL}/orders/${orderId}" class="button">عرض الطلب</a>
+    <a href="${absoluteUrl(`/orders/${orderId}`)}" class="button">عرض الطلب</a>
   `);
   
   return sendEmail({
@@ -223,7 +237,7 @@ export async function sendOrderStatusUpdateEmail(
     <h2>تحديث حالة الطلب</h2>
     <p>رقم الطلب: <strong>${orderId}</strong></p>
     <p>الحالة الجديدة: <strong>${statusAr}</strong></p>
-    <a href="${process.env.NEXTAUTH_URL}/orders/${orderId}" class="button">عرض الطلب</a>
+    <a href="${absoluteUrl(`/orders/${orderId}`)}" class="button">عرض الطلب</a>
   `);
   
   return sendEmail({
@@ -244,7 +258,7 @@ export async function sendSellerNewOrderEmail(
     <p>لديك طلب جديد من <strong>${customerName}</strong>.</p>
     <p>رقم الطلب: <strong>${orderId}</strong></p>
     <p>المجموع: <strong>${orderTotal}</strong></p>
-    <a href="${process.env.NEXTAUTH_URL}/seller/orders/${orderId}" class="button">عرض الطلب</a>
+    <a href="${absoluteUrl(`/seller/orders/${orderId}`)}" class="button">عرض الطلب</a>
   `);
   
   return sendEmail({
@@ -333,7 +347,7 @@ export async function sendAccountActivatedEmail(to: string, name: string) {
     <h2>تم تفعيل حسابك!</h2>
     <p>مرحباً ${name}،</p>
     <p>تم تفعيل حسابك بنجاح. يمكنك الآن استخدام جميع ميزات الموقع.</p>
-    <a href="${process.env.NEXTAUTH_URL}" class="button">تصفح الموقع</a>
+    <a href="${absoluteUrl('/')}" class="button">تصفح الموقع</a>
   `);
   
   return sendEmail({
@@ -352,7 +366,7 @@ export async function sendSellerVerificationApprovedEmail(to: string, storeName:
     <h2>تمت الموافقة على متجرك!</h2>
     <p>تهانينا! تمت الموافقة على متجر <strong>${storeName}</strong>.</p>
     <p>يمكنك الآن البدء ببيع منتجاتك.</p>
-    <a href="${process.env.NEXTAUTH_URL}/seller/dashboard" class="button">لوحة التحكم</a>
+    <a href="${absoluteUrl('/seller/dashboard')}" class="button">لوحة التحكم</a>
   `);
   
   return sendEmail({
@@ -418,7 +432,7 @@ export async function sendAdminCriticalEventEmail(
     <p><strong>النوع:</strong> ${type}</p>
     <p>${body}</p>
     ${entityLink}
-    <a href="${process.env.NEXTAUTH_URL}/admin" class="button">لوحة التحكم</a>
+    <a href="${absoluteUrl('/admin')}" class="button">لوحة التحكم</a>
   `);
 
   return sendEmail({
@@ -448,6 +462,52 @@ const emailService = {
   sendSellerVerificationApprovedEmail,
   sendSellerVerificationRejectedEmail,
   sendAdminCriticalEventEmail,
+  sendAdminWelcomeEmail,
+  sendAdminInviteEmail,
 };
 
 export default emailService;
+
+// ============================================
+// ADMIN MANAGEMENT EMAILS
+// ============================================
+
+/**
+ * Send welcome email to an existing user who was promoted to Admin
+ */
+export async function sendAdminWelcomeEmail(to: string, name: string) {
+  const html = baseTemplate(`
+    <h2>مرحباً ${name}!</h2>
+    <p>تمت ترقيتك إلى <strong>مشرف</strong> في سوريا للتسوق الإلكتروني.</p>
+    <p>يمكنك الآن الوصول إلى لوحة تحكم المشرف لإدارة المنصة.</p>
+    <a href="${absoluteUrl('/admin')}" class="button">لوحة تحكم المشرف</a>
+    <p><small>إذا لم تطلب هذا، يرجى التواصل مع الإدارة فوراً.</small></p>
+  `);
+
+  return sendEmail({
+    to,
+    subject: 'Welcome to SES Marketplace Admin',
+    html,
+  });
+}
+
+/**
+ * Send invite email to a new user being invited as Admin
+ */
+export async function sendAdminInviteEmail(to: string, token: string) {
+  const inviteUrl = absoluteUrl(`/auth/register?invite=${token}&email=${encodeURIComponent(to)}`);
+  const html = baseTemplate(`
+    <h2>دعوة للانضمام كمشرف</h2>
+    <p>تمت دعوتك للانضمام كـ <strong>مشرف</strong> في سوريا للتسوق الإلكتروني.</p>
+    <p>اضغط على الزر أدناه لإنشاء حسابك وتعيين كلمة المرور:</p>
+    <a href="${inviteUrl}" class="button">قبول الدعوة</a>
+    <p><small>هذا الرابط صالح لمدة 24 ساعة فقط.</small></p>
+    <p><small>إذا لم تطلب هذا، تجاهل هذا البريد.</small></p>
+  `);
+
+  return sendEmail({
+    to,
+    subject: 'Welcome to SES Marketplace Admin',
+    html,
+  });
+}

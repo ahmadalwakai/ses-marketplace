@@ -112,15 +112,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return false;
         }
         
-        // If user doesn't exist, create them as CUSTOMER with ACTIVE status
+        // If user doesn't exist, create them
         if (!existingUser) {
+          // Auto-assign ADMIN role if email matches ADMIN_EMAIL env var
+          const isAdmin = process.env.ADMIN_EMAIL
+            ? user.email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase()
+            : false;
+          const assignedRole = isAdmin ? 'ADMIN' : 'CUSTOMER';
+
           const newUser = await prisma.user.create({
             data: {
               email: user.email.toLowerCase(),
               name: user.name || profile?.name || 'مستخدم',
               image: user.image || null,
               emailVerified: new Date(),
-              role: 'CUSTOMER',
+              role: assignedRole,
               status: 'ACTIVE',
             },
           });
@@ -131,7 +137,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.status = newUser.status;
           
           // Send welcome email for new Google signup
-          sendWelcomeEmailWithRole(newUser.email, newUser.name || 'مستخدم', 'CUSTOMER').catch(console.error);
+          sendWelcomeEmailWithRole(newUser.email, newUser.name || 'مستخدم', assignedRole).catch(console.error);
         } else {
           // Check if Google account is already linked
           const googleAccountLinked = existingUser.accounts.some(

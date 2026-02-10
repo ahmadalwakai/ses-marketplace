@@ -23,13 +23,35 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await hashPassword(data.password);
     
+    // Check if there is a valid invite token for this email
+    let assignedRole: 'CUSTOMER' | 'ADMIN' = 'CUSTOMER';
+    const inviteToken = body.invite
+      ? await prisma.inviteToken.findFirst({
+          where: {
+            token: body.invite as string,
+            email: data.email.toLowerCase(),
+            used: false,
+            expiresAt: { gt: new Date() },
+          },
+        })
+      : null;
+
+    if (inviteToken) {
+      assignedRole = 'ADMIN';
+      // Mark the invite token as used
+      await prisma.inviteToken.update({
+        where: { id: inviteToken.id },
+        data: { used: true },
+      });
+    }
+
     // Create user
     const user = await prisma.user.create({
       data: {
         email: data.email.toLowerCase(),
         name: data.name,
         password: hashedPassword,
-        role: 'CUSTOMER',
+        role: assignedRole,
         status: 'ACTIVE', // Auto-activate for now
       },
       select: {

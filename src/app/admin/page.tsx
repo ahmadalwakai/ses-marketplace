@@ -76,6 +76,16 @@ interface SellerCommission {
   seller: { id: string; storeName: string; user: { name: string; email: string } };
 }
 
+interface AdminUser {
+  id: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  role: string;
+  status: string;
+  createdAt: string;
+}
+
 interface AuditLog {
   id: string;
   action: string;
@@ -154,6 +164,13 @@ export default function AdminDashboardPage() {
   const [rankingProducts, setRankingProducts] = useState<RankingProduct[]>([]);
   const [rankingStats, setRankingStats] = useState<{ pinnedCount: number; boostedCount: number; penalizedCount: number } | null>(null);
 
+  // Admins state
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [addAdminEmail, setAddAdminEmail] = useState('');
+  const [addAdminLoading, setAddAdminLoading] = useState(false);
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+  const [adminsToast, setAdminsToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Audit state
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditPage, setAuditPage] = useState(1);
@@ -173,6 +190,7 @@ export default function AdminDashboardPage() {
     if (activeTab === 'settings' && !settings) fetchSettings();
     if (activeTab === 'moderation' && !moderation) fetchModeration();
     if (activeTab === 'ranking' && rankingProducts.length === 0) fetchRanking();
+    if (activeTab === 'admins' && adminUsers.length === 0) fetchAdmins();
     if (activeTab === 'audit' && auditLogs.length === 0) fetchAuditLogs();
     if (activeTab === 'analytics' && !analytics) fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -243,6 +261,68 @@ export default function AdminDashboardPage() {
       }
     } catch (error) {
       console.error('Error fetching ranking:', error);
+    }
+  };
+
+  const fetchAdmins = async () => {
+    try {
+      const res = await fetch('/api/admin/admins');
+      const data = await res.json();
+      if (data.ok) setAdminUsers(data.data);
+    } catch (error) {
+      console.error('Error fetching admins:', error);
+    }
+  };
+
+  const handleAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addAdminEmail.trim()) return;
+    setAddAdminLoading(true);
+    setAdminsToast(null);
+    try {
+      const res = await fetch('/api/admin/admins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: addAdminEmail.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (data.data.invited) {
+          setAdminsToast({ type: 'success', message: `تم إرسال دعوة إلى ${data.data.email}` });
+        } else {
+          setAdminUsers((prev) => [data.data, ...prev.filter((a) => a.id !== data.data.id)]);
+          setAdminsToast({ type: 'success', message: `تمت ترقية ${data.data.email} إلى مشرف` });
+        }
+        setAddAdminEmail('');
+      } else {
+        setAdminsToast({ type: 'error', message: data.error?.message || 'حدث خطأ' });
+      }
+    } catch {
+      setAdminsToast({ type: 'error', message: 'حدث خطأ غير متوقع' });
+    } finally {
+      setAddAdminLoading(false);
+    }
+  };
+
+  const handleRemoveAdmin = async (userId: string) => {
+    setAdminsToast(null);
+    try {
+      const res = await fetch('/api/admin/admins', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAdminUsers((prev) => prev.filter((a) => a.id !== userId));
+        setAdminsToast({ type: 'success', message: 'تمت إزالة صلاحيات المشرف' });
+      } else {
+        setAdminsToast({ type: 'error', message: data.error?.message || 'حدث خطأ' });
+      }
+    } catch {
+      setAdminsToast({ type: 'error', message: 'حدث خطأ غير متوقع' });
+    } finally {
+      setRemoveConfirmId(null);
     }
   };
 
@@ -501,7 +581,7 @@ export default function AdminDashboardPage() {
 
           {/* Tabs */}
           <HStack gap={2} flexWrap="wrap">
-            {['overview', 'analytics', 'users', 'categories', 'settings', 'moderation', 'ranking', 'audit'].map((tab) => (
+            {['overview', 'analytics', 'users', 'admins', 'categories', 'settings', 'moderation', 'ranking', 'audit'].map((tab) => (
               <Button
                 key={tab}
                 size="sm"
@@ -513,7 +593,8 @@ export default function AdminDashboardPage() {
               >
                 {tab === 'overview' ? 'نظرة عامة' : 
                  tab === 'analytics' ? 'التحليلات' :
-                 tab === 'users' ? 'المستخدمين' : 
+                 tab === 'users' ? 'المستخدمين' :
+                 tab === 'admins' ? 'المشرفين' :
                  tab === 'categories' ? 'الفئات' :
                  tab === 'settings' ? 'الإعدادات' :
                  tab === 'moderation' ? 'المراجعة' :
@@ -702,6 +783,131 @@ export default function AdminDashboardPage() {
                   </HStack>
                 </Box>
               ))}
+            </VStack>
+          )}
+
+          {/* Admins Tab */}
+          {activeTab === 'admins' && (
+            <VStack gap={6} align="stretch">
+              <Heading size="md" color="black">إدارة المشرفين</Heading>
+
+              {/* Toast */}
+              {adminsToast && (
+                <Box
+                  p={4}
+                  borderRadius="lg"
+                  bg={adminsToast.type === 'success' ? 'green.50' : 'red.50'}
+                  borderWidth={1}
+                  borderColor={adminsToast.type === 'success' ? 'green.300' : 'red.300'}
+                >
+                  <HStack justify="space-between">
+                    <Text color={adminsToast.type === 'success' ? 'green.700' : 'red.700'}>
+                      {adminsToast.message}
+                    </Text>
+                    <Button size="xs" variant="ghost" onClick={() => setAdminsToast(null)}>✕</Button>
+                  </HStack>
+                </Box>
+              )}
+
+              {/* Add admin form */}
+              <Box
+                p={4}
+                borderWidth={2}
+                borderColor="black"
+                borderRadius="xl"
+                boxShadow="4px 4px 0 0 black"
+              >
+                <Box as="form" onSubmit={handleAddAdmin}>
+                  <Stack gap={4}>
+                    <Text fontWeight="bold" color="black">إضافة مشرف جديد</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      أدخل البريد الإلكتروني لترقية مستخدم حالي أو إرسال دعوة لمستخدم جديد
+                    </Text>
+                    <HStack gap={2}>
+                      <Input
+                        type="email"
+                        placeholder="example@email.com"
+                        value={addAdminEmail}
+                        onChange={(e) => setAddAdminEmail(e.target.value)}
+                        borderWidth={2}
+                        borderColor="black"
+                        required
+                        dir="ltr"
+                      />
+                      <Button
+                        type="submit"
+                        bg="black"
+                        color="white"
+                        _hover={{ bg: 'gray.800' }}
+                        disabled={addAdminLoading}
+                        minW="120px"
+                      >
+                        {addAdminLoading ? 'جاري...' : 'إضافة مشرف'}
+                      </Button>
+                    </HStack>
+                  </Stack>
+                </Box>
+              </Box>
+
+              {/* Admins list */}
+              <VStack gap={3} align="stretch">
+                <Text fontWeight="bold" color="black">المشرفون الحاليون ({adminUsers.length})</Text>
+                {adminUsers.length === 0 ? (
+                  <Text color="gray.500" textAlign="center" p={8}>لا يوجد مشرفون</Text>
+                ) : (
+                  adminUsers.map((admin) => (
+                    <Box key={admin.id} className="neon-card" p={4}>
+                      <HStack justify="space-between" flexWrap="wrap" gap={2}>
+                        <VStack align="start" gap={1}>
+                          <HStack>
+                            <Text fontWeight="bold" color="black">{admin.name || 'بدون اسم'}</Text>
+                            <Badge colorPalette="purple">مشرف</Badge>
+                            <Badge colorPalette={admin.status === 'ACTIVE' ? 'green' : 'red'}>
+                              {admin.status === 'ACTIVE' ? 'نشط' : admin.status}
+                            </Badge>
+                          </HStack>
+                          <Text fontSize="sm" color="gray.600" dir="ltr">{admin.email}</Text>
+                          <Text fontSize="xs" color="gray.500">
+                            انضم: {new Date(admin.createdAt).toLocaleDateString('ar-SY')}
+                          </Text>
+                        </VStack>
+                        <HStack gap={2}>
+                          {removeConfirmId === admin.id ? (
+                            <>
+                              <Text fontSize="sm" color="red.600">تأكيد الإزالة؟</Text>
+                              <Button
+                                size="sm"
+                                colorPalette="red"
+                                onClick={() => handleRemoveAdmin(admin.id)}
+                              >
+                                نعم
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRemoveConfirmId(null)}
+                              >
+                                لا
+                              </Button>
+                            </>
+                          ) : (
+                            session?.user?.id !== admin.id && (
+                              <Button
+                                size="sm"
+                                colorPalette="red"
+                                variant="outline"
+                                onClick={() => setRemoveConfirmId(admin.id)}
+                              >
+                                إزالة
+                              </Button>
+                            )
+                          )}
+                        </HStack>
+                      </HStack>
+                    </Box>
+                  ))
+                )}
+              </VStack>
             </VStack>
           )}
 

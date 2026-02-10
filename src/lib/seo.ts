@@ -1,7 +1,8 @@
 import prisma from '@/lib/prisma';
 import type { Product, SellerProfile, Category } from '@prisma/client';
+import { getBaseUrl } from '@/lib/url/baseUrl';
 
-const SITE_URL = process.env.NEXTAUTH_URL || 'https://ses-marketplace.vercel.app';
+const SITE_URL = getBaseUrl();
 const SITE_NAME = 'سوريا للتسوق الإلكتروني';
 
 // ============================================
