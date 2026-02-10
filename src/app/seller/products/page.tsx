@@ -545,6 +545,30 @@ export default function SellerProductsPage() {
           )}
         </VStack>
       </Container>
+
+      {/* Floating Add Product CTA (mobile) */}
+      <Box
+        display={{ base: 'block', md: 'none' }}
+        position="fixed"
+        bottom={6}
+        left="50%"
+        transform="translateX(-50%)"
+        zIndex={50}
+      >
+        <Link href="/seller/products/new">
+          <Button
+            bg="black"
+            color="white"
+            size="lg"
+            borderRadius="full"
+            px={8}
+            boxShadow="0 4px 20px rgba(0,0,0,0.3)"
+            _hover={{ bg: 'gray.800' }}
+          >
+            + أضف منتج جديد
+          </Button>
+        </Link>
+      </Box>
     </Box>
   );
 }

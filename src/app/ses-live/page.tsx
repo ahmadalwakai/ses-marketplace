@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Box,
   Container,
@@ -14,6 +15,7 @@ import {
   Badge,
   Spinner,
 } from '@chakra-ui/react';
+import { useSavedStore, useCartStore } from '@/lib/store';
 
 interface Product {
   id: string;
@@ -32,11 +34,11 @@ interface Product {
 }
 
 const conditionLabels: Record<string, string> = {
-  NEW: '????',
-  LIKE_NEW: '??? ????',
-  GOOD: '???',
-  FAIR: '?????',
-  POOR: '??????',
+  NEW: 'جديد',
+  LIKE_NEW: 'شبه جديد',
+  GOOD: 'جيد',
+  FAIR: 'مقبول',
+  POOR: 'رديء',
 };
 
 type TabKey = 'trending' | 'newest' | 'top-rated';
@@ -45,6 +47,8 @@ export default function SESLivePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>('trending');
+  const savedStore = useSavedStore();
+  const cartStore = useCartStore();
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -71,9 +75,9 @@ export default function SESLivePage() {
   }, [fetchProducts]);
 
   const tabs: { key: TabKey; label: string; icon: string }[] = [
-    { key: 'trending', label: '?????? ??????', icon: '??' },
-    { key: 'newest', label: '??? ??????', icon: '??' },
-    { key: 'top-rated', label: '?????? ???????', icon: '?' },
+    { key: 'trending', label: 'الأكثر رواجاً', icon: '🔥' },
+    { key: 'newest', label: 'وصل حديثاً', icon: '✨' },
+    { key: 'top-rated', label: 'الأعلى تقييماً', icon: '⭐' },
   ];
 
   return (
@@ -83,16 +87,16 @@ export default function SESLivePage() {
           {/* Header */}
           <VStack gap={2} textAlign="center">
             <HStack justify="center" gap={3}>
-              <Text fontSize="3xl">??</Text>
+              <Text fontSize="3xl">📡</Text>
               <Heading size="2xl" color="black">
                 SES Live
               </Heading>
               <Badge colorPalette="red" fontSize="sm" p={1} px={2} borderRadius="full">
-                ?????
+                مباشر
               </Badge>
             </HStack>
             <Text color="gray.600" fontSize="lg">
-              ???? ???????? ??????? ???? ?? ????? ?????? ??????????
+              تابع المنتجات الرائجة حالياً في السوق السوري الإلكتروني
             </Text>
           </VStack>
 
@@ -118,65 +122,103 @@ export default function SESLivePage() {
           {loading ? (
             <VStack py={16}>
               <Spinner size="xl" color="black" />
-              <Text color="gray.500">???? ???????...</Text>
+              <Text color="gray.500">جاري التحميل...</Text>
             </VStack>
           ) : products.length === 0 ? (
             <VStack py={16} gap={4}>
-              <Text fontSize="5xl">??</Text>
+              <Text fontSize="5xl">📦</Text>
               <Heading size="md" color="gray.600">
-                ?? ???? ?????? ??????
+                لا توجد منتجات حالياً
               </Heading>
               <Link href="/products">
                 <Button bg="black" color="white" _hover={{ bg: 'gray.800' }} size="lg">
-                  ???? ?? ????????
+                  تصفح كل المنتجات
                 </Button>
               </Link>
             </VStack>
           ) : (
             <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} gap={6}>
               {products.map((product, index) => (
-                <Link key={product.id} href={`/products/${product.slug}`}>
-                  <Box
-                    className="neon-card"
-                    borderRadius="xl"
-                    overflow="hidden"
-                    transition="all 0.2s"
-                    _hover={{ transform: 'translateY(-4px)' }}
-                    position="relative"
-                  >
-                    {/* Rank badge for top 3 */}
-                    {tab === 'trending' && index < 3 && (
-                      <Box
-                        position="absolute"
-                        top={2}
-                        right={2}
-                        bg={index === 0 ? 'red.500' : index === 1 ? 'orange.400' : 'yellow.400'}
-                        color="white"
-                        fontWeight="bold"
-                        fontSize="sm"
-                        w="28px"
-                        h="28px"
-                        borderRadius="full"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                        zIndex={2}
-                      >
-                        {index + 1}
-                      </Box>
-                    )}
+                <Box
+                  key={product.id}
+                  className="neon-card"
+                  borderRadius="xl"
+                  overflow="hidden"
+                  transition="all 0.2s"
+                  _hover={{ transform: 'translateY(-4px)' }}
+                  position="relative"
+                >
+                  {/* Rank badge for top 3 */}
+                  {tab === 'trending' && index < 3 && (
+                    <Box
+                      position="absolute"
+                      top={2}
+                      right={2}
+                      bg={index === 0 ? 'red.500' : index === 1 ? 'orange.400' : 'yellow.400'}
+                      color="white"
+                      fontWeight="bold"
+                      fontSize="sm"
+                      w="28px"
+                      h="28px"
+                      borderRadius="full"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      zIndex={2}
+                    >
+                      {index + 1}
+                    </Box>
+                  )}
 
+                  {/* Save button */}
+                  <Box
+                    position="absolute"
+                    top={2}
+                    left={2}
+                    zIndex={2}
+                    cursor="pointer"
+                    bg="white"
+                    borderRadius="full"
+                    w="32px"
+                    h="32px"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    boxShadow="sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (savedStore.isSaved(product.id)) {
+                        savedStore.removeItem(product.id);
+                      } else {
+                        savedStore.addItem({
+                          productId: product.id,
+                          title: product.titleAr || product.title,
+                          price: Number(product.price),
+                          image: product.images[0]?.url,
+                          slug: product.slug,
+                        });
+                      }
+                    }}
+                  >
+                    <Text fontSize="sm">{savedStore.isSaved(product.id) ? '♥' : '♡'}</Text>
+                  </Box>
+
+                  <Link href={`/products/${product.slug}`}>
                     {/* Image */}
-                    <Box h="200px" bg="gray.100" overflow="hidden">
+                    <Box h="200px" bg="gray.100" overflow="hidden" position="relative">
                       {product.images[0]?.url ? (
-                        <img
+                        <Image
                           src={product.images[0].url}
                           alt={product.titleAr || product.title}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          fill
+                          style={{ objectFit: 'cover' }}
+                          sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw"
+                          unoptimized
                         />
                       ) : (
                         <VStack h="full" justify="center">
-                          <Text fontSize="4xl">??</Text>
+                          <Text fontSize="4xl">📦</Text>
                         </VStack>
                       )}
                     </Box>
@@ -189,7 +231,7 @@ export default function SESLivePage() {
 
                       <HStack justify="space-between" flexWrap="wrap">
                         <Text fontWeight="bold" color="black" fontSize="lg">
-                          {Number(product.price).toLocaleString()} ?.?
+                          {Number(product.price).toLocaleString()} ل.س
                         </Text>
                         <Badge colorPalette="gray" fontSize="xs">
                           {conditionLabels[product.condition] || product.condition}
@@ -202,7 +244,7 @@ export default function SESLivePage() {
                         </Text>
                         {product.ratingCount > 0 && (
                           <HStack gap={1}>
-                            <Text fontSize="xs" color="yellow.600">? {Number(product.ratingAvg).toFixed(1)}</Text>
+                            <Text fontSize="xs" color="yellow.600">★ {Number(product.ratingAvg).toFixed(1)}</Text>
                             <Text fontSize="xs" color="gray.400">({product.ratingCount})</Text>
                           </HStack>
                         )}
@@ -214,8 +256,32 @@ export default function SESLivePage() {
                         </Badge>
                       )}
                     </VStack>
+                  </Link>
+
+                  {/* Quick add to cart */}
+                  <Box px={4} pb={4}>
+                    <Button
+                      size="sm"
+                      w="full"
+                      bg="black"
+                      color="white"
+                      _hover={{ bg: 'gray.800' }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        cartStore.addItem({
+                          productId: product.id,
+                          title: product.titleAr || product.title,
+                          price: Number(product.price),
+                          quantity: 1,
+                          image: product.images[0]?.url,
+                        });
+                      }}
+                    >
+                      🛒 أضف للسلة
+                    </Button>
                   </Box>
-                </Link>
+                </Box>
               ))}
             </SimpleGrid>
           )}
@@ -224,16 +290,16 @@ export default function SESLivePage() {
           <Box className="neon-card" p={8}>
             <VStack gap={4} align="stretch">
               <HStack>
-                <Text fontSize="xl">??</Text>
+                <Text fontSize="xl">🚀</Text>
                 <Heading size="md" color="black">
-                  ???? ??????
+                  قريباً
                 </Heading>
               </HStack>
               <SimpleGrid columns={{ base: 1, md: 3 }} gap={4}>
                 {[
-                  { icon: '??', title: '?? ?????', desc: '???? ???????? ??????' },
-                  { icon: '??', title: '????? ?????', desc: '???? ?????? ?????' },
-                  { icon: '???', title: '???? ?????', desc: '?????? ????? ????' },
+                  { icon: '📺', title: 'بث مباشر', desc: 'عروض مباشرة من البائعين' },
+                  { icon: '⏰', title: 'عروض محدودة', desc: 'خصومات لفترة محدودة' },
+                  { icon: '🏷️', title: 'كوبون خصم', desc: 'كوبونات حصرية للمتابعين' },
                 ].map((f) => (
                   <HStack key={f.title} p={4} bg="gray.50" borderRadius="lg" gap={3}>
                     <Text fontSize="2xl">{f.icon}</Text>
@@ -251,12 +317,12 @@ export default function SESLivePage() {
           <HStack justify="center" gap={4} flexWrap="wrap">
             <Link href="/products">
               <Button bg="black" color="white" _hover={{ bg: 'gray.800' }} size="lg">
-                ???? ?? ????????
+                تصفح كل المنتجات
               </Button>
             </Link>
             <Link href="/categories">
               <Button variant="outline" borderColor="black" color="black" size="lg">
-                ???? ??? ?????
+                تصفح حسب الفئات
               </Button>
             </Link>
           </HStack>
