@@ -100,10 +100,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
-      // For OAuth sign-in (Google), handle user creation/validation
+      // For OAuth sign-in (Google), handle user creation/validation and account linking
       if (account?.provider === 'google' && user.email) {
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email.toLowerCase() },
+          include: { accounts: true },
         });
         
         // Block banned/suspended users
@@ -132,6 +133,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // Send welcome email for new Google signup
           sendWelcomeEmailWithRole(newUser.email, newUser.name || 'مستخدم', 'CUSTOMER').catch(console.error);
         } else {
+          // Check if Google account is already linked
+          const googleAccountLinked = existingUser.accounts.some(
+            (acc) => acc.provider === 'google'
+          );
+          
+          // If not linked, link the Google account to existing user
+          if (!googleAccountLinked && account.providerAccountId) {
+            await prisma.account.create({
+              data: {
+                userId: existingUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+            });
+          }
+          
+          // Update user image from Google if not set
+          if (!existingUser.image && user.image) {
+            await prisma.user.update({
+              where: { id: existingUser.id },
+              data: { image: user.image },
+            });
+          }
+          
           // Set the user object properties from existing user
           user.id = existingUser.id;
           user.role = existingUser.role;
