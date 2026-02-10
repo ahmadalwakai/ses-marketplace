@@ -77,6 +77,7 @@ export async function middleware(request: NextRequest) {
     '/api/stores',
     '/api/search',
     '/api/reviews/product',
+    '/api/live-streams',
   ];
   
   const isPublicApiRoute = publicApiRoutes.some(

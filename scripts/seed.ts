@@ -755,6 +755,136 @@ async function main() {
   console.log('✅ Notifications for admin + sellers');
 
   // ──────────────────────────────────────────────
+  // LIVE STREAMS
+  // ──────────────────────────────────────────────
+  // Get some product IDs for stream products
+  const streamProducts = await prisma.product.findMany({
+    where: { status: 'ACTIVE' },
+    select: { id: true, sellerId: true },
+    take: 20,
+  });
+
+  const seller1Products = streamProducts.filter(p => p.sellerId === seller1.id);
+  const seller2Products = streamProducts.filter(p => p.sellerId === seller2.id);
+
+  // Clean up old seeded streams
+  await prisma.liveStreamProduct.deleteMany({});
+  await prisma.liveStream.deleteMany({});
+
+  // Live stream 1 - Currently LIVE from seller 1
+  const stream1 = await prisma.liveStream.create({
+    data: {
+      sellerId: seller1.id,
+      title: 'Flash Sale - Electronics Night',
+      titleAr: 'تخفيضات خاطفة - ليلة الإلكترونيات',
+      description: 'Huge discounts on phones, laptops and accessories',
+      descriptionAr: 'خصومات كبيرة على الهواتف والحواسيب والإكسسوارات',
+      status: 'LIVE',
+      startedAt: new Date(Date.now() - 45 * 60 * 1000), // Started 45 min ago
+      viewerCount: 234,
+      peakViewers: 312,
+    },
+  });
+
+  // Add products to stream 1
+  for (let i = 0; i < Math.min(4, seller1Products.length); i++) {
+    await prisma.liveStreamProduct.create({
+      data: {
+        streamId: stream1.id,
+        productId: seller1Products[i].id,
+        discount: [15, 20, 10, 25][i],
+        sortOrder: i,
+      },
+    });
+  }
+
+  // Live stream 2 - Currently LIVE from seller 2
+  const stream2 = await prisma.liveStream.create({
+    data: {
+      sellerId: seller2.id,
+      title: 'Fashion Show Live',
+      titleAr: 'عرض أزياء مباشر',
+      description: 'Latest fashion collection reveal',
+      descriptionAr: 'كشف عن أحدث تشكيلة أزياء مع عروض حصرية للمشاهدين',
+      status: 'LIVE',
+      startedAt: new Date(Date.now() - 20 * 60 * 1000), // Started 20 min ago
+      viewerCount: 156,
+      peakViewers: 189,
+    },
+  });
+
+  for (let i = 0; i < Math.min(3, seller2Products.length); i++) {
+    await prisma.liveStreamProduct.create({
+      data: {
+        streamId: stream2.id,
+        productId: seller2Products[i].id,
+        discount: [30, 20, 15][i],
+        sortOrder: i,
+      },
+    });
+  }
+
+  // Live stream 3 - Scheduled for tomorrow
+  await prisma.liveStream.create({
+    data: {
+      sellerId: seller1.id,
+      title: 'Tech Unboxing Session',
+      titleAr: 'جلسة فتح صناديق تقنية',
+      description: 'Unboxing latest tech products',
+      descriptionAr: 'فتح أحدث المنتجات التقنية بأسعار حصرية',
+      status: 'SCHEDULED',
+      scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+    },
+  });
+
+  // Live stream 4 - Scheduled for next week
+  await prisma.liveStream.create({
+    data: {
+      sellerId: seller2.id,
+      title: 'Handmade Crafts Special',
+      titleAr: 'عروض خاصة على المصنوعات اليدوية',
+      description: 'Special deals on handmade Syrian crafts',
+      descriptionAr: 'عروض خاصة على الحرف اليدوية السورية مع تخفيضات تصل إلى 40%',
+      status: 'SCHEDULED',
+      scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days out
+    },
+  });
+
+  // Live stream 5 - Ended (past)
+  await prisma.liveStream.create({
+    data: {
+      sellerId: seller1.id,
+      title: 'Gaming Deals Marathon',
+      titleAr: 'ماراثون عروض الألعاب',
+      description: 'Gaming consoles and accessories deals',
+      descriptionAr: 'عروض على أجهزة الألعاب والإكسسوارات',
+      status: 'ENDED',
+      startedAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
+      endedAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+      viewerCount: 0,
+      peakViewers: 478,
+    },
+  });
+
+  // Live stream 6 - Ended (yesterday)
+  await prisma.liveStream.create({
+    data: {
+      sellerId: seller2.id,
+      title: 'Beauty & Skincare Show',
+      titleAr: 'عرض الجمال والعناية بالبشرة',
+      description: 'Skincare tips and product deals',
+      descriptionAr: 'نصائح للعناية بالبشرة وعروض على منتجات الجمال',
+      status: 'ENDED',
+      startedAt: new Date(Date.now() - 28 * 60 * 60 * 1000),
+      endedAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
+      viewerCount: 0,
+      peakViewers: 267,
+    },
+  });
+
+  console.log('✅ 6 Live streams (2 LIVE, 2 SCHEDULED, 2 ENDED)');
+
+  // ──────────────────────────────────────────────
   // DONE
   // ──────────────────────────────────────────────
   console.log('\n🎉 Seed completed successfully!\n');
