@@ -110,7 +110,8 @@ export default function Navbar() {
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [status, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session?.user?.id]);
   
   const fetchNotifications = async () => {
     // Don't fetch if not authenticated
