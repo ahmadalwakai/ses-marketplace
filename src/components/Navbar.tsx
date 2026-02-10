@@ -77,6 +77,8 @@ export default function Navbar() {
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const categoryMenuRef = useRef<HTMLDivElement>(null);
+  const notifFetchingRef = useRef(false);
+  const notifAuthFailedRef = useRef(false);
 
   // Fetch categories for menu
   useEffect(() => {
@@ -100,35 +102,40 @@ export default function Navbar() {
 
   // Fetch notifications
   useEffect(() => {
-    if (status === 'authenticated' && session?.user) {
-      fetchNotifications();
-      // Poll for new notifications every 30 seconds
-      const interval = setInterval(() => {
-        if (status === 'authenticated') {
-          fetchNotifications();
+    if (status !== 'authenticated') {
+      notifAuthFailedRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+
+    const doFetch = async () => {
+      if (notifFetchingRef.current || notifAuthFailedRef.current || cancelled) return;
+      notifFetchingRef.current = true;
+      try {
+        const res = await fetch('/api/notifications/me?limit=10');
+        if (cancelled) return;
+        if (res.status === 401 || res.status === 403) {
+          notifAuthFailedRef.current = true;
+          return;
         }
-      }, 30000);
-      return () => clearInterval(interval);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session?.user?.id]);
-  
-  const fetchNotifications = async () => {
-    // Don't fetch if not authenticated
-    if (status !== 'authenticated') return;
-    
-    try {
-      const res = await fetch('/api/notifications/me?limit=10');
-      if (!res.ok) return; // Silently fail on 401/403
-      const data = await res.json();
-      if (data.success) {
-        setNotifications(data.data.notifications);
-        setUnreadCount(data.data.unreadCount);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setNotifications(data.data.notifications);
+          setUnreadCount(data.data.unreadCount);
+        }
+      } catch {
+        // Silently ignore notification fetch errors
+      } finally {
+        notifFetchingRef.current = false;
       }
-    } catch (error) {
-      // Silently ignore notification fetch errors
-    }
-  };
+    };
+
+    doFetch();
+    const interval = setInterval(doFetch, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [status]);
   
   const markAllRead = async () => {
     try {
