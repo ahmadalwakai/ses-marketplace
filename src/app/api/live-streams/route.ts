@@ -1,22 +1,21 @@
 import { NextRequest } from 'next/server';
+import { LiveStreamStatus, Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { success, handleError } from '@/lib/api-response';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = prisma as any;
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status'); // LIVE, SCHEDULED, ENDED
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50);
+    const statusParam = searchParams.get('status'); // LIVE, SCHEDULED, ENDED
+    const limitParam = Number.parseInt(searchParams.get('limit') || '20', 10);
+    const limit = Math.min(Number.isNaN(limitParam) ? 20 : limitParam, 50);
 
-    const where: Record<string, string> = {};
-    if (status) {
-      where.status = status;
-    }
+    const status = statusParam && Object.values(LiveStreamStatus).includes(statusParam as LiveStreamStatus)
+      ? (statusParam as LiveStreamStatus)
+      : null;
+    const where: Prisma.LiveStreamWhereInput = status ? { status } : {};
 
-    const streams = await db.liveStream.findMany({
+    const streamQuery = Prisma.validator<Prisma.LiveStreamFindManyArgs>()({
       where,
       include: {
         seller: {
@@ -32,6 +31,11 @@ export async function GET(request: NextRequest) {
           },
         },
         products: {
+          select: {
+            productId: true,
+            specialPrice: true,
+            discount: true,
+          },
           orderBy: { sortOrder: 'asc' },
           take: 6,
         },
@@ -44,27 +48,34 @@ export async function GET(request: NextRequest) {
       take: limit,
     });
 
+    const streams = await prisma.liveStream.findMany(streamQuery);
+    type LiveStreamWithRelations = Prisma.LiveStreamGetPayload<typeof streamQuery>;
+
     // Fetch product details for each stream's products
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const allProductIds = streams.flatMap((s: any) =>
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      s.products.map((p: any) => p.productId)
+    const allProductIds = streams.flatMap((stream: LiveStreamWithRelations) =>
+      stream.products.map((product) => product.productId)
     );
 
-    const products = allProductIds.length > 0
-      ? await prisma.product.findMany({
-          where: { id: { in: allProductIds }, status: 'ACTIVE' },
-          include: {
-            images: { take: 1, orderBy: { sortOrder: 'asc' } },
-            category: { select: { name: true, nameAr: true, slug: true } },
-          },
-        })
+    const productQuery = Prisma.validator<Prisma.ProductFindManyArgs>()({
+      where: { id: { in: allProductIds }, status: 'ACTIVE' },
+      include: {
+        images: {
+          select: { url: true },
+          take: 1,
+          orderBy: { sortOrder: 'asc' },
+        },
+        category: { select: { name: true, nameAr: true, slug: true } },
+      },
+    });
+    type ProductWithRelations = Prisma.ProductGetPayload<typeof productQuery>;
+
+    const products: ProductWithRelations[] = allProductIds.length > 0
+      ? await prisma.product.findMany(productQuery)
       : [];
 
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const enrichedStreams = streams.map((stream: any) => ({
+    const enrichedStreams = streams.map((stream: LiveStreamWithRelations) => ({
       id: stream.id,
       title: stream.title,
       titleAr: stream.titleAr,
@@ -84,13 +95,12 @@ export async function GET(request: NextRequest) {
         image: stream.seller.user?.image,
         name: stream.seller.user?.name,
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      products: stream.products.map((sp: any) => {
-        const product = productMap.get(sp.productId);
+      products: stream.products.map((streamProduct) => {
+        const product = productMap.get(streamProduct.productId);
         return {
-          id: sp.productId,
-          specialPrice: sp.specialPrice ? Number(sp.specialPrice) : null,
-          discount: sp.discount,
+          id: streamProduct.productId,
+          specialPrice: streamProduct.specialPrice ? Number(streamProduct.specialPrice) : null,
+          discount: streamProduct.discount,
           title: product?.titleAr || product?.title || '',
           price: product ? Number(product.price) : 0,
           image: product?.images[0]?.url || null,
