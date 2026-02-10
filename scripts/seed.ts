@@ -344,7 +344,7 @@ async function main() {
 
   const seller1 = await prisma.sellerProfile.upsert({
     where: { userId: seller1User.id },
-    update: { verificationStatus: 'APPROVED', verificationLevel: 'TOP_RATED' },
+    update: { verificationStatus: 'APPROVED', verificationLevel: 'TOP_RATED', isSmallBusiness: false },
     create: {
       userId: seller1User.id,
       storeName: 'نور الشام للإلكترونيات',
@@ -358,6 +358,7 @@ async function main() {
       ratingAvg: 4.7,
       ratingCount: 48,
       totalSales: 420,
+      isSmallBusiness: false,
     },
   });
 
@@ -375,7 +376,7 @@ async function main() {
 
   const seller2 = await prisma.sellerProfile.upsert({
     where: { userId: seller2User.id },
-    update: { verificationStatus: 'APPROVED', verificationLevel: 'PREMIUM' },
+    update: { verificationStatus: 'APPROVED', verificationLevel: 'PREMIUM', isSmallBusiness: true },
     create: {
       userId: seller2User.id,
       storeName: 'بيت الأناقة',
@@ -389,6 +390,7 @@ async function main() {
       ratingAvg: 4.5,
       ratingCount: 32,
       totalSales: 280,
+      isSmallBusiness: true,
     },
   });
 
@@ -404,6 +406,8 @@ async function main() {
     const ratingAvg = Math.round((3.6 + sellerRng() * 1.4) * 10) / 10;
     const ratingCount = Math.floor(sellerRng() * 220);
     const totalSales = Math.floor(50 + sellerRng() * 1200);
+    // Mark ~30% of sellers as small business
+    const isSmallBusiness = sellerRng() < 0.3;
 
     const sellerUser = await prisma.user.upsert({
       where: { email: `seller${i}@ses.sy` },
@@ -419,7 +423,7 @@ async function main() {
 
     const profile = await prisma.sellerProfile.upsert({
       where: { userId: sellerUser.id },
-      update: { verificationStatus, verificationLevel, ratingAvg, ratingCount, totalSales },
+      update: { verificationStatus, verificationLevel, ratingAvg, ratingCount, totalSales, isSmallBusiness },
       create: {
         userId: sellerUser.id,
         storeName,
@@ -433,6 +437,7 @@ async function main() {
         ratingAvg,
         ratingCount,
         totalSales,
+        isSmallBusiness,
       },
     });
 

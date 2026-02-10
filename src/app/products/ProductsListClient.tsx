@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
@@ -18,6 +18,7 @@ import {
   Switch,
   Spinner,
 } from '@chakra-ui/react';
+import { useCartStore } from '@/lib/store';
 
 interface Product {
   id: string;
@@ -58,6 +59,29 @@ function ProductsContent() {
   const [showAdvanced, setShowAdvanced] = useState(showAdvancedParam);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+  const [addedToCart, setAddedToCart] = useState<Record<string, boolean>>({});
+
+  // Cart store
+  const cartStore = useCartStore();
+
+  // Add to cart handler
+  const handleAddToCart = useCallback((e: React.MouseEvent, product: Product) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    cartStore.addItem({
+      productId: product.id,
+      title: product.titleAr || product.title,
+      price: product.price,
+      quantity: 1,
+      image: product.images[0]?.url,
+    });
+    
+    setAddedToCart((prev) => ({ ...prev, [product.id]: true }));
+    setTimeout(() => {
+      setAddedToCart((prev) => ({ ...prev, [product.id]: false }));
+    }, 1500);
+  }, [cartStore]);
 
   // Advanced filter state
   const [categoryId, setCategoryId] = useState('');
@@ -534,6 +558,17 @@ function ProductsContent() {
                             </HStack>
                           )}
                         </HStack>
+                        <Button
+                          size="sm"
+                          w="full"
+                          mt={2}
+                          bg={addedToCart[product.id] ? 'green.500' : 'black'}
+                          color="white"
+                          _hover={{ bg: addedToCart[product.id] ? 'green.600' : 'gray.800' }}
+                          onClick={(e) => handleAddToCart(e, product)}
+                        >
+                          {addedToCart[product.id] ? '✓ تمت الإضافة' : '🛒 أضف للسلة'}
+                        </Button>
                       </VStack>
                     </VStack>
                   </Box>

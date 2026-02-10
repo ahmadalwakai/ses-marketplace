@@ -20,6 +20,7 @@ interface Category {
   nameAr: string | null;
   slug: string;
   sortOrder: number;
+  productCount: number;
   children: Category[];
 }
 
@@ -123,6 +124,9 @@ export default function CategoriesPage() {
                         <Heading size="md" color="black" mt={2}>
                           {category.nameAr || category.name}
                         </Heading>
+                        <Text fontSize="sm" color="gray.500" mt={1}>
+                          {category.productCount} منتج
+                        </Text>
                       </Box>
                     </Link>
 

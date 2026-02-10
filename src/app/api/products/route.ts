@@ -17,9 +17,10 @@ export async function GET(request: NextRequest) {
       status: 'ACTIVE',
     };
     
-    // Small Business filter: products from verified (approved) sellers
+    // Small Business filter: products from sellers marked as small business
     if (smallBusiness) {
       where.seller = {
+        isSmallBusiness: true,
         verificationStatus: 'APPROVED',
       };
     }

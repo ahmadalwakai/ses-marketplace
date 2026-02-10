@@ -59,16 +59,18 @@ export default function ForgotPasswordPage() {
             </Text>
           </VStack>
 
-          <Box
-            as="form"
+          <form
             onSubmit={handleSubmit}
-            w="full"
-            p={8}
-            borderWidth={2}
-            borderColor="black"
-            borderRadius="xl"
-            boxShadow="4px 4px 0 0 black"
+            style={{ width: '100%' }}
           >
+            <Box
+              w="full"
+              p={8}
+              borderWidth={2}
+              borderColor="black"
+              borderRadius="xl"
+              boxShadow="4px 4px 0 0 black"
+            >
             <Stack gap={6}>
               {error && (
                 <Box
@@ -137,6 +139,7 @@ export default function ForgotPasswordPage() {
               </Link>
             </Stack>
           </Box>
+          </form>
 
           <Link href="/">
             <Text color="gray.600" _hover={{ color: 'black' }}>

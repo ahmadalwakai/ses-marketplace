@@ -54,11 +54,27 @@ function LoginForm() {
 
       if (result?.error) {
         setError('بريد إلكتروني أو كلمة مرور غير صحيحة');
-      } else {
-        router.push(callbackUrl);
-        router.refresh();
+        setLoading(false);
+        return;
       }
-    } catch {
+
+      // Fetch session to determine role-based redirect
+      try {
+        const sessionRes = await fetch('/api/auth/session');
+        const session = await sessionRes.json();
+        if (session?.user?.role === 'ADMIN') {
+          router.push('/admin');
+        } else if (session?.user?.role === 'SELLER') {
+          router.push(callbackUrl === '/' ? '/seller/dashboard' : callbackUrl);
+        } else {
+          router.push(callbackUrl);
+        }
+      } catch {
+        router.push(callbackUrl);
+      }
+      router.refresh();
+    } catch (err) {
+      console.error('Sign in error:', err);
       setError('حدث خطأ غير متوقع');
     } finally {
       setLoading(false);
@@ -137,7 +153,7 @@ function LoginForm() {
                 <Separator flex={1} />
               </HStack>
 
-              <Box as="form" onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit}>
                 <Stack gap={5}>
                   <Stack gap={2}>
                     <Text fontWeight="bold" color="black">
@@ -192,7 +208,7 @@ function LoginForm() {
                     {loading ? 'جاري التحميل...' : 'تسجيل الدخول'}
                   </Button>
                 </Stack>
-              </Box>
+              </form>
 
               <HStack justify="center" gap={1}>
                 <Text color="gray.600">ليس لديك حساب؟</Text>

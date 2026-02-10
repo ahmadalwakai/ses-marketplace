@@ -219,6 +219,7 @@ model SellerProfile {
   banner             String?
   verificationStatus SellerVerificationStatus  @default(PENDING)
   verificationLevel  SellerVerificationLevel   @default(BASIC)
+  isSmallBusiness    Boolean                   @default(false)
   ratingAvg          Float                     @default(0)
   ratingCount        Int                       @default(0)
   totalSales         Int                       @default(0)
@@ -235,6 +236,7 @@ model SellerProfile {
   @@index([slug])
   @@index([verificationStatus])
   @@index([verificationLevel])
+  @@index([isSmallBusiness])
 }
 
 // ============================================

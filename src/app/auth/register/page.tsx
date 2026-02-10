@@ -149,7 +149,7 @@ export default function RegisterPage() {
                 <Separator flex={1} />
               </HStack>
 
-              <Box as="form" onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit}>
                 <Stack gap={4}>
                   <Stack gap={2}>
                     <Text fontWeight="bold" color="black">
@@ -248,7 +248,7 @@ export default function RegisterPage() {
                     {loading ? 'جاري الإنشاء...' : 'إنشاء حساب'}
                   </Button>
                 </Stack>
-              </Box>
+              </form>
 
               <HStack justify="center" gap={1}>
                 <Text color="gray.600">لديك حساب بالفعل؟</Text>

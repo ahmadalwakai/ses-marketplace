@@ -100,24 +100,32 @@ export default function Navbar() {
 
   // Fetch notifications
   useEffect(() => {
-    if (session?.user) {
+    if (status === 'authenticated' && session?.user) {
       fetchNotifications();
       // Poll for new notifications every 30 seconds
-      const interval = setInterval(fetchNotifications, 30000);
+      const interval = setInterval(() => {
+        if (status === 'authenticated') {
+          fetchNotifications();
+        }
+      }, 30000);
       return () => clearInterval(interval);
     }
-  }, [session]);
+  }, [status, session]);
   
   const fetchNotifications = async () => {
+    // Don't fetch if not authenticated
+    if (status !== 'authenticated') return;
+    
     try {
       const res = await fetch('/api/notifications/me?limit=10');
+      if (!res.ok) return; // Silently fail on 401/403
       const data = await res.json();
       if (data.success) {
         setNotifications(data.data.notifications);
         setUnreadCount(data.data.unreadCount);
       }
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      // Silently ignore notification fetch errors
     }
   };
   

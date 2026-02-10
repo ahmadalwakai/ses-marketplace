@@ -8,6 +8,7 @@ interface CategoryTree {
   nameAr: string | null;
   slug: string;
   sortOrder: number;
+  productCount: number;
   children: CategoryTree[];
 }
 
@@ -19,6 +20,7 @@ function buildCategoryTree(
     slug: string;
     sortOrder: number;
     parentId: string | null;
+    _count: { products: number };
   }[],
   parentId: string | null = null
 ): CategoryTree[] {
@@ -31,6 +33,7 @@ function buildCategoryTree(
       nameAr: cat.nameAr,
       slug: cat.slug,
       sortOrder: cat.sortOrder,
+      productCount: cat._count.products,
       children: buildCategoryTree(categories, cat.id),
     }));
 }
@@ -49,12 +52,24 @@ export async function GET(request: NextRequest) {
         slug: true,
         sortOrder: true,
         parentId: true,
+        _count: {
+          select: {
+            products: {
+              where: { status: 'ACTIVE' },
+            },
+          },
+        },
       },
       orderBy: { sortOrder: 'asc' },
     });
     
     if (flat) {
-      return success(categories);
+      return success(
+        categories.map((cat) => ({
+          ...cat,
+          productCount: cat._count.products,
+        }))
+      );
     }
     
     const tree = buildCategoryTree(categories);
