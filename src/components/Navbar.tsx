@@ -14,7 +14,7 @@ import {
   Input,
   Spinner,
 } from '@chakra-ui/react';
-import { useWishlistStore, useCompareStore, useUIStore, useSearchStore, useCategoryMenuStore, useSavedStore } from '@/lib/store';
+import { useWishlistStore, useCompareStore, useUIStore, useSearchStore, useCategoryMenuStore, useSavedStore, useCartStore } from '@/lib/store';
 
 interface Notification {
   id: string;
@@ -41,6 +41,7 @@ export default function Navbar() {
   const router = useRouter();
   const wishlistItems = useWishlistStore((state) => state.items);
   const compareItems = useCompareStore((state) => state.items);
+  const cartItems = useCartStore((state) => state.items);
   const { mobileMenuOpen, setMobileMenuOpen } = useUIStore();
   const { query, setQuery, suggestions, setSuggestions, isSearching, setIsSearching, clearSuggestions, showAdvanced, toggleAdvanced } = useSearchStore();
   const savedItems = useSavedStore((state) => state.items);
@@ -403,6 +404,36 @@ export default function Navbar() {
                         justifyContent="center"
                       >
                         {savedItems.length + wishlistItems.length}
+                      </Box>
+                    )}
+                  </Button>
+                </Link>
+
+                {/* Cart */}
+                <Link href="/cart">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    position="relative"
+                    aria-label="سلة التسوق"
+                  >
+                    <Text fontSize="lg">🛒</Text>
+                    {cartItems.length > 0 && (
+                      <Box
+                        position="absolute"
+                        top="-1"
+                        right="-1"
+                        bg="black"
+                        color="white"
+                        fontSize="xs"
+                        w="18px"
+                        h="18px"
+                        borderRadius="full"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        {cartItems.length}
                       </Box>
                     )}
                   </Button>
@@ -787,6 +818,18 @@ export default function Navbar() {
                       {(savedItems.length + wishlistItems.length) > 0 && (
                         <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
                           {savedItems.length + wishlistItems.length}
+                        </Text>
+                      )}
+                    </HStack>
+                  </Box>
+                </Link>
+                <Link href="/cart" onClick={() => setMobileMenuOpen(false)}>
+                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                    <HStack justify="space-between">
+                      <Text>🛒 السلة</Text>
+                      {cartItems.length > 0 && (
+                        <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
+                          {cartItems.length}
                         </Text>
                       )}
                     </HStack>

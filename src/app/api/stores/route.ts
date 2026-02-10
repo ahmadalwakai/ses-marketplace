@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    return paginated(sellers, paginationMeta(total, page, limit));
+    return paginated(sellers, paginationMeta(page, limit, total));
   } catch (err) {
     return handleError(err);
   }
