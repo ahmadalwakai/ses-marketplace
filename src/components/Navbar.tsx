@@ -15,6 +15,7 @@ import {
   Spinner,
 } from '@chakra-ui/react';
 import { useWishlistStore, useCompareStore, useUIStore, useSearchStore, useCategoryMenuStore, useSavedStore, useCartStore } from '@/lib/store';
+import { useColorMode, useColorModeValue } from '@/theme';
 
 interface Notification {
   id: string;
@@ -46,7 +47,24 @@ export default function Navbar() {
   const { query, setQuery, suggestions, setSuggestions, isSearching, setIsSearching, clearSuggestions, showAdvanced, toggleAdvanced } = useSearchStore();
   const savedItems = useSavedStore((state) => state.items);
   const { categories: menuCategories, isOpen: categoryMenuOpen, expandedIds, isLoading: categoriesLoading, setCategories: setMenuCategories, setIsOpen: setCategoryMenuOpen, toggleOpen: toggleCategoryMenu, toggleExpanded, setIsLoading: setCategoriesLoading } = useCategoryMenuStore();
-  
+
+  // Color mode
+  const { colorMode, toggleColorMode } = useColorMode();
+  const navBg = useColorModeValue('var(--ses-nav)', '#0b1220');
+  const textClr = useColorModeValue('var(--ses-nav-ink)', '#e7edf5');
+  const borderClr = useColorModeValue('#0b2346', '#1a2b44');
+  const hoverBg = useColorModeValue('#143768', '#1d3354');
+  const activeBg = useColorModeValue('#1b3f74', '#223a5f');
+  const mutedClr = useColorModeValue('#c7d4e6', '#b7c3d6');
+  const dimClr = useColorModeValue('#9fb1c7', '#95a8c1');
+  const subBorder = useColorModeValue('#1a3c6c', '#1d3354');
+  const shadowBox = useColorModeValue('0 12px 28px rgba(8, 22, 40, 0.35)', '0 12px 28px rgba(0, 0, 0, 0.5)');
+  const focusShadow = useColorModeValue('0 0 0 2px rgba(240, 138, 36, 0.5)', '0 0 0 2px rgba(240, 138, 36, 0.5)');
+  const btnBg = useColorModeValue('var(--ses-orange)', 'var(--ses-orange)');
+  const btnClr = useColorModeValue('#1b1b1b', '#1b1b1b');
+  const btnHoverBg = useColorModeValue('var(--ses-orange-dark)', 'var(--ses-orange-dark)');
+  const accentBg = useColorModeValue('#162d52', '#1d3354');
+
   const [localQuery, setLocalQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -151,21 +169,24 @@ export default function Navbar() {
 
   // Fetch autocomplete suggestions
   useEffect(() => {
-    if (debouncedQuery.length >= 2) {
-      setIsSearching(true);
-      fetch(`/api/search?mode=autocomplete&q=${encodeURIComponent(debouncedQuery)}&limit=5`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.data) {
-            setSuggestions(data.data);
-          }
-        })
-        .catch(console.error)
-        .finally(() => setIsSearching(false));
-    } else {
-      clearSuggestions();
-    }
-  }, [debouncedQuery, setSuggestions, clearSuggestions, setIsSearching]);
+    if (!showSuggestions) return;
+
+    const q = debouncedQuery.trim();
+    const url = q.length >= 2
+      ? `/api/search?mode=autocomplete&q=${encodeURIComponent(q)}&limit=5`
+      : `/api/search?mode=autocomplete&limit=6`;
+
+    setIsSearching(true);
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok && data.data) {
+          setSuggestions(data.data);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setIsSearching(false));
+  }, [debouncedQuery, showSuggestions, setSuggestions, setIsSearching]);
 
   // Close suggestions on click outside
   useEffect(() => {
@@ -215,22 +236,29 @@ export default function Navbar() {
     }
   }, [localQuery, router, setQuery]);
 
-  const handleSuggestionClick = (slug: string) => {
+  const handleSuggestionClick = (item: { type: 'product' | 'search'; slug?: string; query?: string; title: string }) => {
     setShowSuggestions(false);
     setLocalQuery('');
-    router.push(`/products/${slug}`);
+    if (item.type === 'product' && item.slug) {
+      router.push(`/products/${item.slug}`);
+      return;
+    }
+    const searchQuery = item.query || item.title;
+    setQuery(searchQuery);
+    router.push(`/products?q=${encodeURIComponent(searchQuery)}`);
   };
 
   return (
     <>
       <Box
         as="nav"
-        bg="white"
+        bg={navBg}
         borderBottomWidth={2}
-        borderColor="black"
+        borderColor={borderClr}
         position="sticky"
         top={0}
         zIndex={100}
+        transition="background-color 0.3s ease"
       >
         <Container maxW="7xl" py={3}>
           <VStack gap={3} align="stretch">
@@ -244,12 +272,12 @@ export default function Navbar() {
                 p={2}
                 aria-label="القائمة"
               >
-                <Text fontSize="xl">{mobileMenuOpen ? '✕' : '☰'}</Text>
+                <Text fontSize="xl">{mobileMenuOpen ? 'X' : '≡'}</Text>
               </Button>
 
               {/* Logo */}
               <Link href="/">
-                <Text fontSize={{ base: 'lg', md: 'xl' }} fontWeight="bold" color="black">
+                <Text fontSize={{ base: 'lg', md: 'xl' }} fontWeight="bold" color={textClr}>
                   SES سوريا
                 </Text>
               </Link>
@@ -262,10 +290,10 @@ export default function Navbar() {
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleCategoryMenu()}
-                    color="black"
+                    color={textClr}
                     fontWeight="medium"
                   >
-                    <Text fontSize="sm">📂 تسوق حسب الفئة</Text>
+                    <Text fontSize="sm">تسوق حسب الفئة</Text>
                     <Text fontSize="xs" ml={1}>{categoryMenuOpen ? '▲' : '▼'}</Text>
                   </Button>
 
@@ -275,16 +303,16 @@ export default function Navbar() {
                       top="100%"
                       right={0}
                       w="280px"
-                      bg="white"
+                      bg={navBg}
                       borderWidth={2}
-                      borderColor="black"
+                      borderColor={borderClr}
                       borderRadius="lg"
-                      boxShadow="4px 4px 0 0 black"
+                      boxShadow={shadowBox}
                       zIndex={300}
                       maxH="400px"
                       overflowY="auto"
                     >
-                      <HStack p={3} borderBottomWidth={1} borderColor="gray.200" justify="space-between">
+                      <HStack p={3} borderBottomWidth={1} borderColor={subBorder} justify="space-between">
                         <Text fontWeight="bold" fontSize="sm">تسوق حسب الفئة</Text>
                         <Link href="/categories" onClick={() => setCategoryMenuOpen(false)}>
                           <Text fontSize="xs" color="blue.600" _hover={{ textDecoration: 'underline' }}>
@@ -301,7 +329,7 @@ export default function Navbar() {
                               <HStack
                                 p={3}
                                 cursor="pointer"
-                                _hover={{ bg: 'gray.50' }}
+                                _hover={{ bg: hoverBg }}
                                 justify="space-between"
                               >
                                 <Link
@@ -309,14 +337,14 @@ export default function Navbar() {
                                   onClick={() => setCategoryMenuOpen(false)}
                                   style={{ flex: 1 }}
                                 >
-                                  <Text fontSize="sm" color="black">
+                                  <Text fontSize="sm" color={textClr}>
                                     {cat.nameAr || cat.name}
                                   </Text>
                                 </Link>
                                 {cat.children && cat.children.length > 0 && (
                                   <Text
                                     fontSize="xs"
-                                    color="gray.400"
+                                    color={dimClr}
                                     cursor="pointer"
                                     onClick={(e) => { e.stopPropagation(); toggleExpanded(cat.id); }}
                                     px={2}
@@ -326,15 +354,15 @@ export default function Navbar() {
                                 )}
                               </HStack>
                               {expandedIds.includes(cat.id) && cat.children && (
-                                <VStack align="stretch" gap={0} pl={4} bg="gray.50">
+                                <VStack align="stretch" gap={0} pl={4} bg={hoverBg}>
                                   {cat.children.map((sub) => (
                                     <Link
                                       key={sub.id}
                                       href={`/categories/${sub.slug}`}
                                       onClick={() => setCategoryMenuOpen(false)}
                                     >
-                                      <Box p={2} _hover={{ bg: 'gray.100' }}>
-                                        <Text fontSize="xs" color="gray.700">
+                                      <Box p={2} _hover={{ bg: activeBg }}>
+                                        <Text fontSize="xs" color={mutedClr}>
                                           {sub.nameAr || sub.name}
                                         </Text>
                                       </Box>
@@ -351,18 +379,18 @@ export default function Navbar() {
                 </Box>
 
                 <Link href="/categories">
-                  <Text color="black" _hover={{ textDecoration: 'underline' }}>
+                  <Text color={textClr} _hover={{ textDecoration: 'underline' }}>
                     كل الفئات
                   </Text>
                 </Link>
                 <Link href="/products">
-                  <Text color="black" _hover={{ textDecoration: 'underline' }}>
+                  <Text color={textClr} _hover={{ textDecoration: 'underline' }}>
                     المنتجات
                   </Text>
                 </Link>
                 <Link href="/small-business">
                   <Text color="green.600" fontWeight="bold" _hover={{ textDecoration: 'underline' }}>
-                    🏪 أعمال صغيرة
+                    أعمال صغيرة
                   </Text>
                 </Link>
                 <Link href="/ses-live">
@@ -371,10 +399,19 @@ export default function Navbar() {
                   </Text>
                 </Link>
                 <Link href="/sellers">
-                  <Text color="black" _hover={{ textDecoration: 'underline' }}>
+                  <Text color={textClr} _hover={{ textDecoration: 'underline' }}>
                     🏬 المتاجر
                   </Text>
                 </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleColorMode}
+                  color={textClr}
+                  fontWeight="medium"
+                >
+                  <Text fontSize="sm">{colorMode === 'light' ? '🌙 ليلي' : '☀️ نهاري'}</Text>
+                </Button>
               </HStack>
 
               {/* Icons + Auth */}
@@ -393,8 +430,8 @@ export default function Navbar() {
                         position="absolute"
                         top="-1"
                         right="-1"
-                        bg="black"
-                        color="white"
+                        bg={btnBg}
+                        color={btnClr}
                         fontSize="xs"
                         w="18px"
                         h="18px"
@@ -417,14 +454,14 @@ export default function Navbar() {
                     position="relative"
                     aria-label="سلة التسوق"
                   >
-                    <Text fontSize="lg">🛒</Text>
+                    <Text fontSize="lg">السلة</Text>
                     {cartItems.length > 0 && (
                       <Box
                         position="absolute"
                         top="-1"
                         right="-1"
-                        bg="black"
-                        color="white"
+                        bg={btnBg}
+                        color={btnClr}
                         fontSize="xs"
                         w="18px"
                         h="18px"
@@ -453,8 +490,8 @@ export default function Navbar() {
                         position="absolute"
                         top="-1"
                         right="-1"
-                        bg="black"
-                        color="white"
+                        bg={btnBg}
+                        color={btnClr}
                         fontSize="xs"
                         w="18px"
                         h="18px"
@@ -508,16 +545,16 @@ export default function Navbar() {
                         left={{ base: 'auto', md: 0 }}
                         right={{ base: 0, md: 'auto' }}
                         w={{ base: '300px', md: '350px' }}
-                        bg="white"
+                        bg={navBg}
                         borderWidth={2}
-                        borderColor="black"
+                        borderColor={borderClr}
                         borderRadius="lg"
-                        boxShadow="4px 4px 0 0 black"
+                        boxShadow={shadowBox}
                         zIndex={300}
                         maxH="400px"
                         overflowY="auto"
                       >
-                        <HStack justify="space-between" p={3} borderBottomWidth={1} borderColor="gray.200">
+                        <HStack justify="space-between" p={3} borderBottomWidth={1} borderColor={subBorder}>
                           <Text fontWeight="bold">الإشعارات</Text>
                           {unreadCount > 0 && (
                             <Button size="xs" variant="ghost" onClick={markAllRead}>
@@ -528,7 +565,7 @@ export default function Navbar() {
                         
                         {notifications.length === 0 ? (
                           <Box p={4} textAlign="center">
-                            <Text color="gray.500">لا توجد إشعارات</Text>
+                            <Text color={mutedClr}>لا توجد إشعارات</Text>
                           </Box>
                         ) : (
                           <VStack align="stretch" gap={0}>
@@ -537,25 +574,25 @@ export default function Navbar() {
                                 key={notification.id}
                                 p={3}
                                 cursor="pointer"
-                                bg={notification.read ? 'white' : 'blue.50'}
-                                _hover={{ bg: 'gray.100' }}
+                                bg={notification.read ? navBg : accentBg}
+                                _hover={{ bg: activeBg }}
                                 onClick={() => handleNotificationClick(notification)}
                                 borderBottomWidth={1}
-                                borderColor="gray.100"
+                                borderColor={subBorder}
                               >
                                 <VStack align="start" gap={1}>
                                   <HStack w="full" justify="space-between">
-                                    <Text fontWeight="bold" fontSize="sm" color="black">
+                                    <Text fontWeight="bold" fontSize="sm" color={textClr}>
                                       {notification.title}
                                     </Text>
                                     {!notification.read && (
                                       <Box w="8px" h="8px" bg="blue.500" borderRadius="full" />
                                     )}
                                   </HStack>
-                                  <Text fontSize="xs" color="gray.600" lineClamp={2}>
+                                  <Text fontSize="xs" color={mutedClr} lineClamp={2}>
                                     {notification.message}
                                   </Text>
-                                  <Text fontSize="xs" color="gray.400">
+                                  <Text fontSize="xs" color={dimClr}>
                                     {new Date(notification.createdAt).toLocaleDateString('ar-SY')}
                                   </Text>
                                 </VStack>
@@ -575,28 +612,28 @@ export default function Navbar() {
                   <HStack gap={1} display={{ base: 'none', md: 'flex' }}>
                     {session.user?.role === 'ADMIN' && (
                       <Link href="/admin">
-                        <Button size="sm" variant="outline" borderColor="black" color="black">
+                        <Button size="sm" variant="outline" borderColor={borderClr} color={textClr}>
                           لوحة المشرف
                         </Button>
                       </Link>
                     )}
                     {session.user?.role === 'SELLER' && (
                       <Link href="/seller">
-                        <Button size="sm" variant="outline" borderColor="black" color="black">
+                        <Button size="sm" variant="outline" borderColor={borderClr} color={textClr}>
                           لوحة البائع
                         </Button>
                       </Link>
                     )}
                     <Link href="/dashboard">
-                      <Button size="sm" variant="outline" borderColor="black" color="black">
+                      <Button size="sm" variant="outline" borderColor={borderClr} color={textClr}>
                         حسابي
                       </Button>
                     </Link>
                     <Button
                       size="sm"
-                      bg="black"
-                      color="white"
-                      _hover={{ bg: 'gray.800' }}
+                      bg={btnBg}
+                      color={btnClr}
+                      _hover={{ bg: btnHoverBg }}
                       onClick={() => signOut({ callbackUrl: '/' })}
                     >
                       خروج
@@ -605,12 +642,12 @@ export default function Navbar() {
                 ) : (
                   <HStack gap={1} display={{ base: 'none', md: 'flex' }}>
                     <Link href="/auth/login">
-                      <Button size="sm" variant="outline" borderColor="black" color="black">
+                      <Button size="sm" variant="outline" borderColor={borderClr} color={textClr}>
                         دخول
                       </Button>
                     </Link>
                     <Link href="/auth/register">
-                      <Button size="sm" bg="black" color="white" _hover={{ bg: 'gray.800' }}>
+                      <Button size="sm" bg={btnBg} color={btnClr} _hover={{ bg: btnHoverBg }}>
                         تسجيل
                       </Button>
                     </Link>
@@ -633,27 +670,28 @@ export default function Navbar() {
                     placeholder="ابحث عن أي شيء..."
                     size={{ base: 'md', md: 'lg' }}
                     borderWidth={2}
-                    borderColor="black"
-                    _focus={{ boxShadow: '2px 2px 0 0 black' }}
+                    borderColor={borderClr}
+                    color={textClr}
+                    _focus={{ boxShadow: focusShadow }}
                     flex={1}
                   />
                   <Button
                     type="submit"
                     size={{ base: 'md', md: 'lg' }}
-                    bg="black"
-                    color="white"
-                    _hover={{ bg: 'gray.800' }}
+                    bg={btnBg}
+                    color={btnClr}
+                    _hover={{ bg: btnHoverBg }}
                     px={{ base: 4, md: 8 }}
                   >
-                    🔍 بحث
+                    بحث
                   </Button>
                   <Button
                     type="button"
                     size={{ base: 'md', md: 'lg' }}
                     variant="outline"
-                    borderColor="black"
-                    color="black"
-                    _hover={{ bg: 'gray.100' }}
+                    borderColor={borderClr}
+                    color={textClr}
+                    _hover={{ bg: activeBg }}
                     px={{ base: 3, md: 6 }}
                     onClick={() => {
                       toggleAdvanced();
@@ -669,15 +707,15 @@ export default function Navbar() {
                   <Button
                     type="button"
                     size={{ base: 'md', md: 'lg' }}
-                    bg="purple.600"
-                    color="white"
-                    _hover={{ bg: 'purple.700' }}
+                    bg={btnBg}
+                    color={btnClr}
+                    _hover={{ bg: btnHoverBg }}
                     px={{ base: 3, md: 6 }}
                     onClick={handleSmartSearch}
                     disabled={!localQuery.trim() || smartSearchLoading}
                     display={{ base: 'none', md: 'flex' }}
                   >
-                    {smartSearchLoading ? <Spinner size="sm" /> : '🤖 بحث ذكي'}
+                    {smartSearchLoading ? <Spinner size="sm" /> : 'بحث ذكي'}
                   </Button>
                 </HStack>
               </form>
@@ -689,20 +727,20 @@ export default function Navbar() {
                   top="100%"
                   left={0}
                   right={0}
-                  bg="white"
+                  bg={navBg}
                   borderWidth={2}
-                  borderColor="black"
+                  borderColor={borderClr}
                   borderTop={0}
                   borderRadius="0 0 lg lg"
-                  boxShadow="4px 4px 0 0 black"
+                  boxShadow={shadowBox}
                   zIndex={200}
                   maxH="300px"
                   overflowY="auto"
                 >
                   {isSearching ? (
                     <HStack p={4} justify="center">
-                      <Spinner size="sm" color="black" />
-                      <Text color="gray.600">جاري البحث...</Text>
+                      <Spinner size="sm" color={textClr} />
+                      <Text color={mutedClr}>جاري البحث...</Text>
                     </HStack>
                   ) : suggestions.length > 0 ? (
                     <VStack align="stretch" gap={0}>
@@ -711,37 +749,38 @@ export default function Navbar() {
                           key={item.id}
                           p={3}
                           cursor="pointer"
-                          _hover={{ bg: 'gray.100' }}
-                          onClick={() => handleSuggestionClick(item.slug)}
+                          _hover={{ bg: activeBg }}
+                          onClick={() => handleSuggestionClick(item)}
                           borderBottomWidth={1}
-                          borderColor="gray.200"
+                          borderColor={subBorder}
                         >
                           <HStack>
                             {item.image && (
-                              <Box w="40px" h="40px" bg="gray.100" borderRadius="md" overflow="hidden">
+                              <Box w="40px" h="40px" bg={hoverBg} borderRadius="md" overflow="hidden" position="relative">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={item.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               </Box>
                             )}
-                            <Text color="black">{item.title}</Text>
+                            <Text color={textClr}>{item.title}</Text>
                           </HStack>
                         </Box>
                       ))}
                       <Box
                         p={3}
                         cursor="pointer"
-                        bg="gray.50"
-                        _hover={{ bg: 'gray.100' }}
+                        bg={hoverBg}
+                        _hover={{ bg: activeBg }}
                         onClick={handleSearch as any}
                         textAlign="center"
                       >
-                        <Text color="black" fontWeight="medium">
+                        <Text color={textClr} fontWeight="medium">
                           عرض كل النتائج لـ &ldquo;{localQuery}&rdquo;
                         </Text>
                       </Box>
                     </VStack>
                   ) : localQuery.length >= 2 ? (
                     <Box p={4} textAlign="center">
-                      <Text color="gray.600">لا توجد نتائج</Text>
+                      <Text color={mutedClr}>لا توجد نتائج</Text>
                     </Box>
                   ) : null}
                 </Box>
@@ -769,54 +808,54 @@ export default function Navbar() {
             right="0"
             w="280px"
             h="100%"
-            bg="white"
+            bg={navBg}
             borderLeftWidth={2}
-            borderColor="black"
+            borderColor={borderClr}
             onClick={(e) => e.stopPropagation()}
           >
             <VStack align="stretch" p={4} gap={4}>
               <HStack justify="space-between">
                 <Text fontWeight="bold" fontSize="lg">القائمة</Text>
-                <Button variant="ghost" onClick={() => setMobileMenuOpen(false)}>✕</Button>
+                <Button variant="ghost" onClick={() => setMobileMenuOpen(false)}>X</Button>
               </HStack>
 
               <VStack align="stretch" gap={2}>
                 <Link href="/products" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
-                    <Text>المنتجات</Text>
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
+                    <Text color={textClr}>المنتجات</Text>
                   </Box>
                 </Link>
                 <Link href="/categories" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
-                    <Text>📂 كل الفئات</Text>
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
+                    <Text color={textClr}>كل الفئات</Text>
                   </Box>
                 </Link>
                 <Link href="/products?advanced=true" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
-                    <Text>🔍 بحث متقدم</Text>
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
+                    <Text color={textClr}>بحث متقدم</Text>
                   </Box>
                 </Link>
                 <Link href="/small-business" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
-                    <Text color="green.600" fontWeight="bold">🏪 أعمال صغيرة</Text>
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
+                    <Text color="green.600" fontWeight="bold">أعمال صغيرة</Text>
                   </Box>
                 </Link>
                 <Link href="/ses-live" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
                     <Text color="red.500" fontWeight="bold">🔴 SES Live</Text>
                   </Box>
                 </Link>
                 <Link href="/sellers" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
-                    <Text>🏬 المتاجر</Text>
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
+                    <Text color={textClr}>🏬 المتاجر</Text>
                   </Box>
                 </Link>
                 <Link href="/saved" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
                     <HStack justify="space-between">
-                      <Text>♡ المحفوظات</Text>
+                      <Text color={textClr}>♡ المحفوظات</Text>
                       {(savedItems.length + wishlistItems.length) > 0 && (
-                        <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
+                        <Text bg={btnBg} color={btnClr} px={2} borderRadius="full" fontSize="sm">
                           {savedItems.length + wishlistItems.length}
                         </Text>
                       )}
@@ -824,11 +863,11 @@ export default function Navbar() {
                   </Box>
                 </Link>
                 <Link href="/cart" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
                     <HStack justify="space-between">
-                      <Text>🛒 السلة</Text>
+                      <Text color={textClr}>السلة</Text>
                       {cartItems.length > 0 && (
-                        <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
+                        <Text bg={btnBg} color={btnClr} px={2} borderRadius="full" fontSize="sm">
                           {cartItems.length}
                         </Text>
                       )}
@@ -836,11 +875,11 @@ export default function Navbar() {
                   </Box>
                 </Link>
                 <Link href="/compare" onClick={() => setMobileMenuOpen(false)}>
-                  <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
+                  <Box p={3} _hover={{ bg: activeBg }} borderRadius="md">
                     <HStack justify="space-between">
-                      <Text>⚖ المقارنة</Text>
+                      <Text color={textClr}>⚖ المقارنة</Text>
                       {compareItems.length > 0 && (
-                        <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
+                        <Text bg={btnBg} color={btnClr} px={2} borderRadius="full" fontSize="sm">
                           {compareItems.length}
                         </Text>
                       )}
@@ -849,26 +888,26 @@ export default function Navbar() {
                 </Link>
               </VStack>
 
-              <Box borderTopWidth={1} borderColor="gray.200" pt={4}>
+              <Box borderTopWidth={1} borderColor={subBorder} pt={4}>
                 {session ? (
                   <VStack align="stretch" gap={2}>
                     {session.user?.role === 'ADMIN' && (
                       <Link href="/admin" onClick={() => setMobileMenuOpen(false)}>
-                        <Button w="full" variant="outline" borderColor="black">لوحة المشرف</Button>
+                        <Button w="full" variant="outline" borderColor={borderClr} color={textClr}>لوحة المشرف</Button>
                       </Link>
                     )}
                     {session.user?.role === 'SELLER' && (
                       <Link href="/seller" onClick={() => setMobileMenuOpen(false)}>
-                        <Button w="full" variant="outline" borderColor="black">لوحة البائع</Button>
+                        <Button w="full" variant="outline" borderColor={borderClr} color={textClr}>لوحة البائع</Button>
                       </Link>
                     )}
                     <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
-                      <Button w="full" variant="outline" borderColor="black">حسابي</Button>
+                      <Button w="full" variant="outline" borderColor={borderClr} color={textClr}>حسابي</Button>
                     </Link>
                     <Button
                       w="full"
-                      bg="black"
-                      color="white"
+                      bg={btnBg}
+                      color={btnClr}
                       onClick={() => signOut({ callbackUrl: '/' })}
                     >
                       خروج
@@ -877,13 +916,23 @@ export default function Navbar() {
                 ) : (
                   <VStack align="stretch" gap={2}>
                     <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
-                      <Button w="full" variant="outline" borderColor="black">دخول</Button>
+                      <Button w="full" variant="outline" borderColor={borderClr} color={textClr}>دخول</Button>
                     </Link>
                     <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)}>
-                      <Button w="full" bg="black" color="white">تسجيل</Button>
+                      <Button w="full" bg={btnBg} color={btnClr}>تسجيل</Button>
                     </Link>
                   </VStack>
                 )}
+                <Button
+                  w="full"
+                  mt={3}
+                  variant="outline"
+                  borderColor={borderClr}
+                  color={textClr}
+                  onClick={toggleColorMode}
+                >
+                  {colorMode === 'light' ? '🌙 ليلي' : '☀️ نهاري'}
+                </Button>
               </Box>
             </VStack>
           </Box>

@@ -430,7 +430,7 @@ export async function sendAdminCriticalEventEmail(
   });
 }
 
-export default {
+const emailService = {
   sendEmail,
   sendWelcomeEmail,
   sendWelcomeEmailWithRole,
@@ -449,3 +449,5 @@ export default {
   sendSellerVerificationRejectedEmail,
   sendAdminCriticalEventEmail,
 };
+
+export default emailService;

@@ -100,7 +100,7 @@ interface ModerationData {
     storeName: string;
     slug: string;
     createdAt: string;
-    user: { name: string; email: string };
+    user: { id: string; name: string; email: string };
   }>;
   pendingReviews: Array<{
     id: string;
@@ -157,6 +157,7 @@ export default function AdminDashboardPage() {
   // Audit state
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditPage, setAuditPage] = useState(1);
+  const [analytics, setAnalytics] = useState<{ rangeDays: number; totals: { orders: number; gmv: number; newUsers: number; newSellers: number; newProducts: number; conversionRate: number; orderRate: number }; daily: { date: string; orders: number; gmv: number }[] } | null>(null);
 
   // New category form
   const [newCategory, setNewCategory] = useState({ name: '', description: '' });
@@ -173,6 +174,8 @@ export default function AdminDashboardPage() {
     if (activeTab === 'moderation' && !moderation) fetchModeration();
     if (activeTab === 'ranking' && rankingProducts.length === 0) fetchRanking();
     if (activeTab === 'audit' && auditLogs.length === 0) fetchAuditLogs();
+    if (activeTab === 'analytics' && !analytics) fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const fetchData = async () => {
@@ -253,6 +256,16 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const fetchAnalytics = async () => {
+    try {
+      const res = await fetch('/api/admin/analytics?days=14');
+      const data = await res.json();
+      if (data.success) setAnalytics(data.data);
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    }
+  };
+
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -328,15 +341,32 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleApproveSeller = async (sellerId: string) => {
+  const handleApproveSeller = async (sellerId: string, level?: string) => {
     try {
-      const seller = moderation?.pendingSellers.find(s => s.id === sellerId);
-      if (!seller) return;
-      
-      const res = await fetch(`/api/admin/users/${seller.user.email}/status`, {
+      const res = await fetch(`/api/admin/sellers/${sellerId}/verify`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'ACTIVE' }),
+        body: JSON.stringify({ status: 'APPROVED', level: level || 'BASIC' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModeration(prev => prev ? {
+          ...prev,
+          pendingSellers: prev.pendingSellers.filter(s => s.id !== sellerId),
+          counts: { ...prev.counts, pendingSellers: prev.counts.pendingSellers - 1 },
+        } : null);
+      }
+    } catch {
+      alert('حدث خطأ غير متوقع');
+    }
+  };
+
+  const handleRejectSeller = async (sellerId: string) => {
+    try {
+      const res = await fetch(`/api/admin/sellers/${sellerId}/verify`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'REJECTED' }),
       });
       const data = await res.json();
       if (data.success) {
@@ -471,7 +501,7 @@ export default function AdminDashboardPage() {
 
           {/* Tabs */}
           <HStack gap={2} flexWrap="wrap">
-            {['overview', 'users', 'categories', 'settings', 'moderation', 'ranking', 'audit'].map((tab) => (
+            {['overview', 'analytics', 'users', 'categories', 'settings', 'moderation', 'ranking', 'audit'].map((tab) => (
               <Button
                 key={tab}
                 size="sm"
@@ -482,6 +512,7 @@ export default function AdminDashboardPage() {
                 onClick={() => setActiveTab(tab)}
               >
                 {tab === 'overview' ? 'نظرة عامة' : 
+                 tab === 'analytics' ? 'التحليلات' :
                  tab === 'users' ? 'المستخدمين' : 
                  tab === 'categories' ? 'الفئات' :
                  tab === 'settings' ? 'الإعدادات' :
@@ -555,6 +586,60 @@ export default function AdminDashboardPage() {
                   <Text fontSize="4xl" fontWeight="bold" color="black">
                     {overview.totalRevenue.toLocaleString()} ل.س
                   </Text>
+                </VStack>
+              </Box>
+            </VStack>
+          )}
+
+          {/* Analytics Tab */}
+          {activeTab === 'analytics' && analytics && (
+            <VStack gap={6} align="stretch">
+              <HStack justify="space-between">
+                <Heading size="md" color="black">تحليلات آخر {analytics.rangeDays} يوم</Heading>
+                <Button size="sm" variant="outline" borderColor="black" onClick={fetchAnalytics}>
+                  تحديث
+                </Button>
+              </HStack>
+
+              <SimpleGrid columns={{ base: 2, md: 3 }} gap={4}>
+                <Box className="neon-card" p={4} textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="black">{analytics.totals.orders}</Text>
+                  <Text color="gray.600">طلبات</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="black">{analytics.totals.gmv.toLocaleString()}</Text>
+                  <Text color="gray.600">GMV (ل.س)</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="black">{analytics.totals.newUsers}</Text>
+                  <Text color="gray.600">مستخدمين جدد</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="black">{analytics.totals.newSellers}</Text>
+                  <Text color="gray.600">بائعين جدد</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="black">{analytics.totals.newProducts}</Text>
+                  <Text color="gray.600">منتجات جديدة</Text>
+                </Box>
+                <Box className="neon-card" p={4} textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="black">{analytics.totals.conversionRate}%</Text>
+                  <Text color="gray.600">تحويل إضافة للسلة</Text>
+                </Box>
+              </SimpleGrid>
+
+              <Box className="neon-card" p={6}>
+                <Heading size="sm" color="black" mb={4}>الأداء اليومي</Heading>
+                <VStack align="stretch" gap={2}>
+                  {analytics.daily.map((day) => (
+                    <HStack key={day.date} justify="space-between" p={3} bg="gray.50" borderRadius="lg">
+                      <Text color="gray.600">{day.date}</Text>
+                      <HStack gap={6}>
+                        <Text color="black">طلبات: {day.orders}</Text>
+                        <Text color="black">GMV: {day.gmv.toLocaleString()} ل.س</Text>
+                      </HStack>
+                    </HStack>
+                  ))}
                 </VStack>
               </Box>
             </VStack>

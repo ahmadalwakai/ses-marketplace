@@ -73,6 +73,7 @@ export default function SellerInsightsPage() {
     if (status === 'authenticated') {
       fetchInsights();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, period]);
 
   const fetchInsights = async () => {

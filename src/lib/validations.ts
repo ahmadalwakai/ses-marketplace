@@ -155,6 +155,7 @@ export const productFilterSchema = z.object({
   minPrice: z.coerce.number().positive().optional(),
   maxPrice: z.coerce.number().positive().optional(),
   minRating: z.coerce.number().min(0).max(5).optional(),
+  inStock: z.coerce.boolean().optional(),
   sellerId: z.string().cuid().optional(),
   status: productStatusSchema.optional(),
   smallBusiness: z.coerce.boolean().optional(),

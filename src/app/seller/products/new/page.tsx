@@ -110,6 +110,7 @@ export default function NewProductWizard() {
         .substring(0, 50);
       setData((prev) => ({ ...prev, slug: generatedSlug }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.title]);
 
   const fetchCategories = async () => {

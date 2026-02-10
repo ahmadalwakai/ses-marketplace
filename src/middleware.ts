@@ -6,19 +6,25 @@ const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
 
 // Simple in-memory rate limiting (use Redis in production)
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const authRateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX = 100; // 100 requests per minute
+const AUTH_RATE_LIMIT_MAX = 20; // 20 auth requests per minute
 
-function checkRateLimit(ip: string): boolean {
+function checkRateLimit(
+  map: Map<string, { count: number; resetTime: number }>,
+  ip: string,
+  max: number
+): boolean {
   const now = Date.now();
-  const record = rateLimitMap.get(ip);
+  const record = map.get(ip);
   
   if (!record || now > record.resetTime) {
-    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    map.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
     return true;
   }
   
-  if (record.count >= RATE_LIMIT_MAX) {
+  if (record.count >= max) {
     return false;
   }
   
@@ -35,7 +41,14 @@ export async function middleware(request: NextRequest) {
              'unknown';
   
   // Rate limiting for API routes
-  if (pathname.startsWith('/api') && !checkRateLimit(ip)) {
+  if (pathname.startsWith('/api/auth') && !checkRateLimit(authRateLimitMap, ip, AUTH_RATE_LIMIT_MAX)) {
+    return NextResponse.json(
+      { success: false, error: 'Too many auth requests. Please try again later.' },
+      { status: 429 }
+    );
+  }
+
+  if (pathname.startsWith('/api') && !checkRateLimit(rateLimitMap, ip, RATE_LIMIT_MAX)) {
     return NextResponse.json(
       { success: false, error: 'Too many requests. Please try again later.' },
       { status: 429 }
@@ -166,6 +179,13 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-XSS-Protection', '1; mode=block');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+  response.headers.set('X-DNS-Prefetch-Control', 'on');
+  if (request.nextUrl.protocol === 'https:') {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   
   return response;
 }

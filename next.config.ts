@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [320, 420, 640, 768, 1024, 1280, 1536],
+    imageSizes: [64, 96, 128, 256, 384],
+    minimumCacheTTL: 60,
     remotePatterns: [
       {
         protocol: 'https',
@@ -15,6 +19,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '**.cloudflare.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'picsum.photos',
       },
     ],
   },

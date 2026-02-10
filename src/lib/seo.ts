@@ -77,6 +77,26 @@ export function generateBreadcrumbJsonLd(
   };
 }
 
+export function generateItemListJsonLd(
+  items: { name: string; url: string; image?: string | null }[],
+  pageUrl: string
+): object {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      url: item.url.startsWith('http') ? item.url : `${SITE_URL}${item.url}`,
+      name: item.name,
+      image: item.image
+        ? (item.image.startsWith('http') ? item.image : `${SITE_URL}${item.image}`)
+        : undefined,
+    })),
+    url: pageUrl.startsWith('http') ? pageUrl : `${SITE_URL}${pageUrl}`,
+  };
+}
+
 export function generateOrganizationJsonLd(): object {
   return {
     '@context': 'https://schema.org',

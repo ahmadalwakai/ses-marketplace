@@ -31,6 +31,13 @@ enum SellerVerificationStatus {
   REJECTED
 }
 
+enum SellerVerificationLevel {
+  BASIC
+  VERIFIED
+  PREMIUM
+  TOP_RATED
+}
+
 enum ProductStatus {
   DRAFT
   PENDING
@@ -185,6 +192,7 @@ model User {
   accounts        Account[]
   sessions        Session[]
   sellerProfile   SellerProfile?
+  addresses       Address[]
   orders          Order[]          @relation("CustomerOrders")
   reviews         Review[]
   disputes        Dispute[]        @relation("DisputeOpener")
@@ -201,18 +209,22 @@ model User {
 }
 
 model SellerProfile {
-  id                 String                   @id @default(cuid())
-  userId             String                   @unique
+  id                 String                    @id @default(cuid())
+  userId             String                    @unique
   storeName          String
-  slug               String                   @unique
+  slug               String                    @unique
   bio                String?
   phone              String?
-  verificationStatus SellerVerificationStatus @default(PENDING)
-  ratingAvg          Float                    @default(0)
-  ratingCount        Int                      @default(0)
-  lowStockThreshold  Int                      @default(5)
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
+  logo               String?
+  banner             String?
+  verificationStatus SellerVerificationStatus  @default(PENDING)
+  verificationLevel  SellerVerificationLevel   @default(BASIC)
+  ratingAvg          Float                     @default(0)
+  ratingCount        Int                       @default(0)
+  totalSales         Int                       @default(0)
+  lowStockThreshold  Int                       @default(5)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
 
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   products    Product[]
@@ -222,6 +234,34 @@ model SellerProfile {
 
   @@index([slug])
   @@index([verificationStatus])
+  @@index([verificationLevel])
+}
+
+// ============================================
+// ADDRESS MODEL
+// ============================================
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  label      String   @default("المنزل")
+  fullName   String
+  phone      String
+  governorate String
+  city       String
+  area       String?
+  street     String
+  building   String?
+  floor      String?
+  notes      String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isDefault])
 }
 
 // ============================================

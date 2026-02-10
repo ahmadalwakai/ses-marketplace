@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Box,
   Container,
@@ -56,6 +57,7 @@ export default function SmallBusinessPage() {
 
   useEffect(() => {
     fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, sort]);
 
   const fetchProducts = async (query?: string) => {
@@ -208,10 +210,12 @@ export default function SmallBusinessPage() {
                       {/* Product Image */}
                       <Box h="200px" bg="gray.100" position="relative">
                         {product.images?.[0] ? (
-                          <img
+                          <Image
                             src={product.images[0].url}
-                            alt={product.title}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            alt={product.titleAr || product.title}
+                            fill
+                            style={{ objectFit: 'cover' }}
+                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
                           />
                         ) : (
                           <VStack h="full" justify="center">

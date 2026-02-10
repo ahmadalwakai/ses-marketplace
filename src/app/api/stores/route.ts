@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
           ratingAvg: true,
           ratingCount: true,
           verificationStatus: true,
+          verificationLevel: true,
           createdAt: true,
           _count: { select: { products: true } },
         },

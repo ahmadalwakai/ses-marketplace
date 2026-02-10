@@ -9,6 +9,138 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin123!@#';
 // Placeholder product images from picsum (royalty-free)
 const img = (id: number) => `https://picsum.photos/seed/ses${id}/600/600`;
 
+type Rng = () => number;
+
+function mulberry32(seed: number): Rng {
+  return function () {
+    let t = (seed += 0x6D2B79F5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const sellerStoreNames = [
+  'سوق الشام الحديث',
+  'المحترف للتقنية',
+  'دار البهجة',
+  'شام ستايل',
+  'كنوز الشرق',
+  'بيت الحرف',
+  'روائع النخبة',
+  'المنارة للهواتف',
+  'المدينة الذكية',
+  'مخزن الأناقة',
+  'الزهراء للمفروشات',
+  'فنون دمشق',
+  'النخبة الرياضية',
+  'الحرفي السوري',
+  'الواحة الرقمية',
+  'رونق الحلي',
+  'الرياضة بلس',
+  'النور للأجهزة',
+  'حكاية سوق',
+  'مركز الابداع',
+];
+
+const sellerBios = [
+  'متجر موثوق يقدم منتجات أصلية وشحن سريع داخل سوريا.',
+  'تشكيلة واسعة بأسعار منافسة وخدمة عملاء مميزة.',
+  'مختصون في أحدث الصيحات مع ضمان الجودة.',
+  'منتجات مختارة بعناية من أفضل الموردين المحليين.',
+  'نوفر خيارات متعددة مع عروض أسبوعية حصرية.',
+  'خبرة طويلة في السوق السوري مع تقييمات ممتازة.',
+];
+
+const productAdjectives = [
+  'Premium',
+  'Classic',
+  'Smart',
+  'Ultra',
+  'Eco',
+  'Pro',
+  'Light',
+  'Max',
+  'Sport',
+  'Deluxe',
+  'Compact',
+  'Essential',
+];
+
+const productNouns = [
+  'Phone',
+  'Laptop',
+  'Headphones',
+  'Watch',
+  'Shoes',
+  'Backpack',
+  'Camera',
+  'Speaker',
+  'Table',
+  'Chair',
+  'Lamp',
+  'Jacket',
+  'Dress',
+  'Mixer',
+  'Blender',
+  'Router',
+  'Monitor',
+  'Keyboard',
+  'Mouse',
+  'Skincare Set',
+  'Perfume',
+  'Sunglasses',
+  'Wallet',
+  'Fitness Mat',
+  'Resistance Band',
+  'Toy Set',
+  'Travel Bag',
+  'Coffee Maker',
+  'Vacuum',
+  'Gaming Console',
+];
+
+const productBrands = [
+  'Orion',
+  'Zenith',
+  'Nova',
+  'Atlas',
+  'Lumen',
+  'Pulse',
+  'Vertex',
+  'Aurora',
+  'Solace',
+  'Vivoa',
+  'Nexon',
+  'Helio',
+  'Artemis',
+  'Strata',
+  'Momentum',
+  'Apex',
+  'Cobalt',
+  'Echo',
+  'Glide',
+  'Ridge',
+];
+
+const productTags = [
+  'popular',
+  'new',
+  'bestseller',
+  'sale',
+  'gift',
+  'trend',
+];
+
+const conditions = ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR'] as const;
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
+}
+
 async function main() {
   console.log('🌱 Starting comprehensive database seed...\n');
 
@@ -59,7 +191,21 @@ async function main() {
       },
       navConfig: { categories: [], showAll: true },
       cookieConsentConfig: { analytics: false, marketing: false, functional: true },
-      searchConfig: { advancedEnabled: true, filtersEnabled: true, suggestionsEnabled: true },
+      searchConfig: {
+        advancedEnabled: true,
+        filtersEnabled: true,
+        suggestionsEnabled: true,
+        popularSearches: [
+          'هواتف سامسونج',
+          'ايفون مستعمل',
+          'لابتوبات',
+          'ساعات يد',
+          'أحذية رياضية',
+          'مستحضرات تجميل',
+          'أجهزة منزلية',
+          'أثاث منزلي',
+        ],
+      },
     },
   });
   console.log('✅ Admin settings');
@@ -179,9 +325,10 @@ async function main() {
   console.log(`✅ ${Object.keys(categoryMap).length} categories (${topCategories.length} top + subs)`);
 
   // ──────────────────────────────────────────────
-  // 4. SELLER ACCOUNTS (2 sellers)
+  // 4. SELLER ACCOUNTS (50 sellers)
   // ──────────────────────────────────────────────
   const sellerPassword = await bcrypt.hash('Seller123!@#', 12);
+  const sellerRng = mulberry32(2026);
 
   const seller1User = await prisma.user.upsert({
     where: { email: 'seller1@ses.sy' },
@@ -197,16 +344,20 @@ async function main() {
 
   const seller1 = await prisma.sellerProfile.upsert({
     where: { userId: seller1User.id },
-    update: { verificationStatus: 'APPROVED' },
+    update: { verificationStatus: 'APPROVED', verificationLevel: 'TOP_RATED' },
     create: {
       userId: seller1User.id,
       storeName: 'نور الشام للإلكترونيات',
       slug: 'nour-alsham-electronics',
       bio: 'متجر متخصص في الإلكترونيات والأجهزة الذكية. نوفر أحدث المنتجات بأفضل الأسعار مع ضمان وتوصيل لكل سوريا.',
       phone: '+963911234567',
+      logo: img(4001),
+      banner: img(4101),
       verificationStatus: 'APPROVED',
+      verificationLevel: 'TOP_RATED',
       ratingAvg: 4.7,
       ratingCount: 48,
+      totalSales: 420,
     },
   });
 
@@ -224,20 +375,71 @@ async function main() {
 
   const seller2 = await prisma.sellerProfile.upsert({
     where: { userId: seller2User.id },
-    update: { verificationStatus: 'APPROVED' },
+    update: { verificationStatus: 'APPROVED', verificationLevel: 'PREMIUM' },
     create: {
       userId: seller2User.id,
       storeName: 'بيت الأناقة',
       slug: 'bait-alanaqah',
       bio: 'أزياء عصرية ومجوهرات فاخرة. تشكيلة واسعة من الماركات العالمية والمحلية بأسعار منافسة.',
       phone: '+963933456789',
+      logo: img(4002),
+      banner: img(4102),
       verificationStatus: 'APPROVED',
+      verificationLevel: 'PREMIUM',
       ratingAvg: 4.5,
       ratingCount: 32,
+      totalSales: 280,
     },
   });
 
-  console.log('✅ 2 sellers: نور الشام (seller1@ses.sy) + بيت الأناقة (seller2@ses.sy)');
+  const extraSellers: Array<{ id: string; userId: string }> = [];
+  const verificationLevels = ['BASIC', 'VERIFIED', 'PREMIUM', 'TOP_RATED'] as const;
+
+  for (let i = 3; i <= 50; i++) {
+    const storeName = sellerStoreNames[(i - 1) % sellerStoreNames.length] + ` ${i}`;
+    const slug = `store-${i}`;
+    const verificationStatus = sellerRng() > 0.2 ? 'APPROVED' : 'PENDING';
+    const levelIndex = Math.floor(sellerRng() * verificationLevels.length);
+    const verificationLevel = verificationLevels[levelIndex];
+    const ratingAvg = Math.round((3.6 + sellerRng() * 1.4) * 10) / 10;
+    const ratingCount = Math.floor(sellerRng() * 220);
+    const totalSales = Math.floor(50 + sellerRng() * 1200);
+
+    const sellerUser = await prisma.user.upsert({
+      where: { email: `seller${i}@ses.sy` },
+      update: { role: 'SELLER', status: 'ACTIVE' },
+      create: {
+        email: `seller${i}@ses.sy`,
+        name: storeName,
+        password: sellerPassword,
+        role: 'SELLER',
+        status: 'ACTIVE',
+      },
+    });
+
+    const profile = await prisma.sellerProfile.upsert({
+      where: { userId: sellerUser.id },
+      update: { verificationStatus, verificationLevel, ratingAvg, ratingCount, totalSales },
+      create: {
+        userId: sellerUser.id,
+        storeName,
+        slug,
+        bio: sellerBios[(i - 3) % sellerBios.length],
+        phone: `+9639${Math.floor(10000000 + sellerRng() * 89999999)}`,
+        logo: img(4000 + i),
+        banner: img(4100 + i),
+        verificationStatus,
+        verificationLevel,
+        ratingAvg,
+        ratingCount,
+        totalSales,
+      },
+    });
+
+    extraSellers.push({ id: profile.id, userId: sellerUser.id });
+  }
+
+  console.log('✅ 50 sellers seeded (seller1@ses.sy + seller2@ses.sy + seller3..seller50)');
 
   // ──────────────────────────────────────────────
   // 5. CUSTOMER ACCOUNTS (2 customers)
@@ -271,7 +473,7 @@ async function main() {
   console.log('✅ 2 customers: سارة (customer1@ses.sy) + عمر (customer2@ses.sy)');
 
   // ──────────────────────────────────────────────
-  // 6. PRODUCTS (20 products across categories)
+  // 6. PRODUCTS (1000+ products across categories)
   // ──────────────────────────────────────────────
   interface ProductSeed {
     title: string;
@@ -291,6 +493,10 @@ async function main() {
     status: 'ACTIVE' | 'PENDING';
     tags: string[];
   }
+
+  const sellerIds = [seller1.id, seller2.id, ...extraSellers.map((s) => s.id)];
+  const categorySlugs = Object.keys(categoryMap);
+  const productRng = mulberry32(9090);
 
   const productSeeds: ProductSeed[] = [
     // Seller 1 — Electronics store (12 products)
@@ -499,6 +705,48 @@ async function main() {
     },
   ];
 
+  const targetProductCount = 1000;
+  let generatedIndex = 0;
+  while (productSeeds.length < targetProductCount) {
+    const sellerId = sellerIds[generatedIndex % sellerIds.length];
+    const categorySlug = categorySlugs[generatedIndex % categorySlugs.length];
+    const brand = productBrands[generatedIndex % productBrands.length];
+    const adjective = productAdjectives[generatedIndex % productAdjectives.length];
+    const noun = productNouns[generatedIndex % productNouns.length];
+    const priceBase = 50000 + Math.floor(productRng() * 6000000);
+    const quantity = Math.floor(productRng() * 120);
+    const ratingAvg = Math.round((3.4 + productRng() * 1.6) * 10) / 10;
+    const ratingCount = Math.floor(productRng() * 260);
+    const viewCount = Math.floor(productRng() * 8000);
+    const condition = conditions[Math.floor(productRng() * conditions.length)];
+    const status = productRng() > 0.12 ? 'ACTIVE' : 'PENDING';
+    const tag = productTags[Math.floor(productRng() * productTags.length)];
+
+    const title = `${brand} ${adjective} ${noun}`;
+    const slug = slugify(`${brand}-${adjective}-${noun}-${generatedIndex + 1}`);
+
+    productSeeds.push({
+      title,
+      titleAr: title,
+      slug,
+      description: `${title} built for daily use with reliable quality and local support.`,
+      descriptionAr: `${title} بجودة موثوقة واستعمال يومي مع دعم محلي.`,
+      price: priceBase,
+      quantity,
+      condition,
+      categorySlug,
+      sellerId,
+      imgSeed: 1000 + generatedIndex,
+      ratingAvg,
+      ratingCount,
+      viewCount,
+      status,
+      tags: [brand.toLowerCase(), noun.toLowerCase(), categorySlug, tag],
+    });
+
+    generatedIndex += 1;
+  }
+
   const productIdMap: Record<string, string> = {};
 
   for (const p of productSeeds) {
@@ -541,17 +789,17 @@ async function main() {
 
     productIdMap[p.slug] = product.id;
 
-    // Create product image if it doesn't exist
-    const existingImage = await prisma.productImage.findFirst({
+    // Ensure at least 3 product images
+    const existingCount = await prisma.productImage.count({
       where: { productId: product.id },
     });
-    if (!existingImage) {
+    for (let i = existingCount; i < 3; i++) {
       await prisma.productImage.create({
         data: {
           productId: product.id,
-          url: img(p.imgSeed),
+          url: img(p.imgSeed + i),
           alt: p.titleAr,
-          sortOrder: 0,
+          sortOrder: i,
           width: 600,
           height: 600,
         },

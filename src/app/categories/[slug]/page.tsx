@@ -1,234 +1,142 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import prisma from '@/lib/prisma';
 import {
-  Box,
-  Container,
-  Heading,
-  Text,
-  SimpleGrid,
-  VStack,
-  HStack,
-  Badge,
-  Spinner,
-  Button,
-} from '@chakra-ui/react';
+  generateBreadcrumbJsonLd,
+  generateCategoryJsonLd,
+  generateCategoryMetadata,
+  generateItemListJsonLd,
+  generateMetadata as buildMetadata,
+} from '@/lib/seo';
+import CategoryDetailClient from './CategoryDetailClient';
 
-interface Product {
-  id: string;
-  title: string;
-  titleAr: string | null;
-  slug: string;
-  price: number;
-  condition: string;
-  images: { url: string; alt: string | null }[];
-  category: { id: string; name: string; nameAr: string | null; slug: string };
-  seller: { id: string; storeName: string; slug: string };
-  ratingAvg: number | null;
-  ratingCount: number;
-}
+async function fetchCategoryDetail(slug: string) {
+  const category = await prisma.category.findUnique({
+    where: { slug },
+    include: {
+      children: {
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+      },
+      _count: { select: { products: true } },
+    },
+  });
 
-interface CategoryInfo {
-  id: string;
-  name: string;
-  nameAr: string | null;
-  slug: string;
-  children: CategoryInfo[];
-}
-
-export default function CategorySlugPage() {
-  const params = useParams();
-  const slug = params?.slug as string;
-
-  const [products, setProducts] = useState<Product[]>([]);
-  const [category, setCategory] = useState<CategoryInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-
-  useEffect(() => {
-    if (!slug) return;
-    fetchCategoryData();
-  }, [slug]);
-
-  const fetchCategoryData = async () => {
-    setLoading(true);
-    try {
-      // Fetch categories tree to find current category info
-      const catRes = await fetch('/api/categories');
-      const catData = await catRes.json();
-      if (catData.success) {
-        const found = findCategory(catData.data, slug);
-        setCategory(found);
-
-        // Fetch products in this category using search API
-        if (found) {
-          const prodRes = await fetch(`/api/search?categoryId=${found.id}`);
-          const prodData = await prodRes.json();
-          if (prodData.success) {
-            setProducts(prodData.data || []);
-            setTotal(prodData.pagination?.total || prodData.data?.length || 0);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching category data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const findCategory = (cats: CategoryInfo[], targetSlug: string): CategoryInfo | null => {
-    for (const cat of cats) {
-      if (cat.slug === targetSlug) return cat;
-      if (cat.children) {
-        const found = findCategory(cat.children, targetSlug);
-        if (found) return found;
-      }
-    }
+  if (!category || !category.isActive) {
     return null;
+  }
+
+  const products = await prisma.product.findMany({
+    where: { categoryId: category.id, status: 'ACTIVE' },
+    orderBy: [{ pinned: 'desc' }, { score: 'desc' }, { createdAt: 'desc' }],
+    take: 24,
+    select: {
+      id: true,
+      title: true,
+      titleAr: true,
+      slug: true,
+      price: true,
+      condition: true,
+      ratingAvg: true,
+      ratingCount: true,
+      images: {
+        select: { url: true, alt: true },
+        orderBy: { sortOrder: 'asc' },
+        take: 1,
+      },
+      category: { select: { id: true, name: true, nameAr: true, slug: true } },
+      seller: { select: { id: true, storeName: true, slug: true } },
+    },
+  });
+
+  return {
+    category,
+    products: products.map((product) => ({
+      ...product,
+      price: Number(product.price),
+    })),
+    total: category._count?.products || 0,
   };
+}
 
-  if (loading) {
-    return (
-      <Box minH="100vh" bg="white" py={20}>
-        <Container maxW="7xl">
-          <VStack py={20}>
-            <Spinner size="xl" color="black" />
-          </VStack>
-        </Container>
-      </Box>
-    );
+export async function generateMetadata(
+  { params }: { params: Promise<{ slug: string }> }
+): Promise<Metadata> {
+  const { slug } = await params;
+  const category = await prisma.category.findUnique({
+    where: { slug },
+  });
+
+  if (!category || !category.isActive) {
+    return buildMetadata({
+      title: 'التصنيف غير موجود',
+      description: 'هذا التصنيف غير متاح حالياً.',
+    });
   }
 
-  if (!category) {
-    return (
-      <Box minH="100vh" bg="white" py={20}>
-        <Container maxW="7xl">
-          <VStack py={20} gap={4}>
-            <Text fontSize="xl" color="gray.600">التصنيف غير موجود</Text>
-            <Link href="/categories">
-              <Button bg="black" color="white">العودة لكل الفئات</Button>
-            </Link>
-          </VStack>
-        </Container>
-      </Box>
-    );
+  return buildMetadata(generateCategoryMetadata(category));
+}
+
+export default async function CategorySlugPage(
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await params;
+  const data = await fetchCategoryDetail(slug);
+  if (!data) {
+    notFound();
   }
+
+  const breadcrumbs = [
+    { name: 'الرئيسية', url: '/' },
+    { name: 'كل الفئات', url: '/categories' },
+    { name: data.category.nameAr || data.category.name, url: `/categories/${data.category.slug}` },
+  ];
+
+  const categoryJsonLd = generateCategoryJsonLd(data.category);
+  const breadcrumbJsonLd = generateBreadcrumbJsonLd(breadcrumbs);
+  const itemListJsonLd = generateItemListJsonLd(
+    data.products.map((product) => ({
+      name: product.titleAr || product.title,
+      url: `/products/${product.slug}`,
+      image: product.images[0]?.url || null,
+    })),
+    `/categories/${data.category.slug}`
+  );
 
   return (
-    <Box minH="100vh" bg="white" py={10}>
-      <Container maxW="7xl">
-        <VStack gap={8} align="stretch">
-          {/* Breadcrumb */}
-          <HStack gap={2} fontSize="sm" color="gray.500">
-            <Link href="/">الرئيسية</Link>
-            <Text>›</Text>
-            <Link href="/categories">كل الفئات</Link>
-            <Text>›</Text>
-            <Text color="black" fontWeight="bold">{category.nameAr || category.name}</Text>
-          </HStack>
-
-          {/* Header */}
-          <VStack gap={2}>
-            <Heading size="2xl" color="black">
-              {category.nameAr || category.name}
-            </Heading>
-            <Text color="gray.600">
-              {total} منتج في هذا التصنيف
-            </Text>
-          </VStack>
-
-          {/* Subcategories */}
-          {category.children && category.children.length > 0 && (
-            <Box>
-              <Text fontWeight="bold" mb={3}>التصنيفات الفرعية:</Text>
-              <HStack gap={2} flexWrap="wrap">
-                {category.children.map((sub) => (
-                  <Link key={sub.id} href={`/categories/${sub.slug}`}>
-                    <Badge
-                      px={4}
-                      py={2}
-                      borderRadius="full"
-                      borderWidth={2}
-                      borderColor="black"
-                      cursor="pointer"
-                      _hover={{ bg: 'black', color: 'white' }}
-                      transition="all 0.2s"
-                    >
-                      {sub.nameAr || sub.name}
-                    </Badge>
-                  </Link>
-                ))}
-              </HStack>
-            </Box>
-          )}
-
-          {/* Products Grid */}
-          {products.length === 0 ? (
-            <VStack py={20}>
-              <Text fontSize="xl" color="gray.600">
-                لا توجد منتجات في هذا التصنيف
-              </Text>
-              <Link href="/products">
-                <Button bg="black" color="white" mt={4}>تصفح جميع المنتجات</Button>
-              </Link>
-            </VStack>
-          ) : (
-            <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} gap={6}>
-              {products.map((product) => (
-                <Link key={product.id} href={`/products/${product.slug}`}>
-                  <Box
-                    className="neon-card"
-                    p={4}
-                    cursor="pointer"
-                    transition="all 0.2s"
-                    _hover={{ transform: 'translateY(-4px)' }}
-                  >
-                    <VStack align="stretch" gap={3}>
-                      <Box h="200px" bg="gray.100" borderRadius="lg" overflow="hidden">
-                        {product.images?.[0] ? (
-                          <img
-                            src={product.images[0].url}
-                            alt={product.images[0].alt || product.title}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <VStack h="full" justify="center">
-                            <Text color="gray.400">لا توجد صورة</Text>
-                          </VStack>
-                        )}
-                      </Box>
-                      <VStack align="stretch" gap={1}>
-                        <Text fontWeight="bold" color="black" lineClamp={2}>
-                          {product.titleAr || product.title}
-                        </Text>
-                        <Text fontSize="sm" color="gray.600">
-                          {product.seller?.storeName}
-                        </Text>
-                        <HStack justify="space-between">
-                          <Text fontWeight="bold" fontSize="lg" color="black">
-                            {product.price?.toLocaleString()} ل.س
-                          </Text>
-                          {product.ratingAvg && (
-                            <HStack gap={1}>
-                              <Text color="yellow.500">★</Text>
-                              <Text fontSize="sm" color="gray.600">
-                                {Number(product.ratingAvg).toFixed(1)}
-                              </Text>
-                            </HStack>
-                          )}
-                        </HStack>
-                      </VStack>
-                    </VStack>
-                  </Box>
-                </Link>
-              ))}
-            </SimpleGrid>
-          )}
-        </VStack>
-      </Container>
-    </Box>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(categoryJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+      />
+      <CategoryDetailClient 
+        initialData={{
+          category: {
+            id: data.category.id,
+            name: data.category.name,
+            nameAr: data.category.nameAr,
+            slug: data.category.slug,
+            children: data.category.children.map((child) => ({
+              id: child.id,
+              name: child.name,
+              nameAr: child.nameAr,
+              slug: child.slug,
+              children: [],
+            })),
+          },
+          products: data.products,
+          total: data.total,
+        }} 
+        slug={slug} 
+      />
+    </>
   );
 }

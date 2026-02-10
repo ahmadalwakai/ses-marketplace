@@ -180,10 +180,12 @@ export async function cleanupExpiredSessions(): Promise<number> {
   return result.count;
 }
 
-export default {
+const r2Service = {
   createSignedUploadUrl,
   confirmUpload,
   deleteFile,
   cleanupExpiredSessions,
   getUploadValidation,
 };
+
+export default r2Service;

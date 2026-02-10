@@ -1,8 +1,30 @@
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { productFilterSchema } from '@/lib/validations';
-import { paginated, handleError, paginationMeta, success } from '@/lib/api-response';
+import { handleError, paginationMeta, success } from '@/lib/api-response';
 import type { Prisma } from '@prisma/client';
+
+function normalizeArabic(text: string): string {
+  return text
+    .normalize('NFKD')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/[ى]/g, 'ي')
+    .replace(/[ؤ]/g, 'و')
+    .replace(/[ئ]/g, 'ي')
+    .replace(/[ة]/g, 'ه')
+    .replace(/\u0640/g, '')
+    .trim();
+}
+
+function buildSearchTerms(input: string): string[] {
+  const rawTerms = input.split(/\s+/).filter(Boolean);
+  const normalizedInput = normalizeArabic(input);
+  const normalizedTerms = normalizedInput.split(/\s+/).filter(Boolean);
+
+  const termSet = new Set<string>([...rawTerms, ...normalizedTerms]);
+  return Array.from(termSet).filter(Boolean);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,21 +33,46 @@ export async function GET(request: NextRequest) {
     
     // Handle autocomplete mode
     if (mode === 'autocomplete') {
-      const q = searchParams.get('q') || '';
+      const q = (searchParams.get('q') || '').trim();
       const limit = Math.min(parseInt(searchParams.get('limit') || '5'), 10);
-      
+
       if (q.length < 2) {
-        return success([]);
+        const settings = await prisma.adminSettings.findUnique({
+          where: { id: 'singleton' },
+          select: { searchConfig: true },
+        });
+        const searchConfig = settings?.searchConfig as { popularSearches?: string[] } | null;
+        const popular = (searchConfig?.popularSearches || []).slice(0, limit);
+
+        const popularSuggestions = popular.map((term, index) => ({
+          id: `popular-${index}`,
+          title: term,
+          type: 'search' as const,
+          query: term,
+        }));
+
+        return success(popularSuggestions);
       }
-      
+
+      const normalized = normalizeArabic(q);
+      const orFilters: Prisma.ProductWhereInput[] = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { titleAr: { contains: q, mode: 'insensitive' } },
+        { brand: { contains: q, mode: 'insensitive' } },
+      ];
+
+      if (normalized && normalized !== q) {
+        orFilters.push(
+          { title: { contains: normalized, mode: 'insensitive' } },
+          { titleAr: { contains: normalized, mode: 'insensitive' } },
+          { brand: { contains: normalized, mode: 'insensitive' } }
+        );
+      }
+
       const products = await prisma.product.findMany({
         where: {
           status: 'ACTIVE',
-          OR: [
-            { title: { contains: q, mode: 'insensitive' } },
-            { titleAr: { contains: q, mode: 'insensitive' } },
-            { brand: { contains: q, mode: 'insensitive' } },
-          ],
+          OR: orFilters,
         },
         select: {
           id: true,
@@ -41,14 +88,15 @@ export async function GET(request: NextRequest) {
         take: limit,
         orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
       });
-      
+
       const suggestions = products.map((p) => ({
         id: p.id,
         title: p.titleAr || p.title,
+        type: 'product' as const,
         slug: p.slug,
         image: p.images[0]?.url || null,
       }));
-      
+
       return success(suggestions);
     }
     
@@ -56,7 +104,7 @@ export async function GET(request: NextRequest) {
     const params = Object.fromEntries(searchParams.entries());
     const filters = productFilterSchema.parse(params);
     
-    const { page, limit, q, categoryId, condition, minPrice, maxPrice, minRating, sort } = filters;
+    const { page, limit, q, categoryId, condition, minPrice, maxPrice, minRating, sellerId, inStock, sort } = filters;
     
     // Build where clause
     const where: Prisma.ProductWhereInput = {
@@ -65,7 +113,7 @@ export async function GET(request: NextRequest) {
     
     // Full-text search across multiple fields
     if (q) {
-      const searchTerms = q.split(/\s+/).filter(Boolean);
+      const searchTerms = buildSearchTerms(q);
       where.AND = searchTerms.map((term) => ({
         OR: [
           { title: { contains: term, mode: 'insensitive' as const } },
@@ -100,6 +148,10 @@ export async function GET(request: NextRequest) {
     if (condition) {
       where.condition = condition;
     }
+
+    if (sellerId) {
+      where.sellerId = sellerId;
+    }
     
     if (minPrice !== undefined || maxPrice !== undefined) {
       where.price = {};
@@ -113,6 +165,10 @@ export async function GET(request: NextRequest) {
     
     if (minRating !== undefined) {
       where.ratingAvg = { gte: minRating };
+    }
+
+    if (inStock) {
+      where.quantity = { gt: 0 };
     }
     
     // Build order by
@@ -188,7 +244,11 @@ export async function GET(request: NextRequest) {
     
     const pagination = paginationMeta(page, limit, total);
     
-    return paginated(products, pagination);
+    return success({
+      items: products,
+      pagination,
+      aggregations,
+    });
   } catch (err) {
     return handleError(err);
   }
@@ -217,33 +277,72 @@ async function getSubcategoryIds(categoryId: string): Promise<string[]> {
  * Get aggregations for search filters
  */
 async function getSearchAggregations(where: Prisma.ProductWhereInput) {
-  const [conditions, priceRange, categories] = await Promise.all([
-    // Condition counts
+  const [conditions, priceRange, categories, sellers] = await Promise.all([
     prisma.product.groupBy({
       by: ['condition'],
       where,
       _count: true,
     }),
-    // Price range
     prisma.product.aggregate({
       where,
       _min: { price: true },
       _max: { price: true },
     }),
-    // Category counts
     prisma.product.groupBy({
       by: ['categoryId'],
       where: { ...where, categoryId: { not: null } },
       _count: true,
     }),
+    prisma.product.groupBy({
+      by: ['sellerId'],
+      where,
+      _count: true,
+    }),
   ]);
-  
+
+  const categoryIds = categories
+    .map((c) => c.categoryId)
+    .filter((id): id is string => Boolean(id));
+  const sellerIds = sellers.map((s) => s.sellerId);
+
+  const [categoryDetails, sellerDetails] = await Promise.all([
+    categoryIds.length
+      ? prisma.category.findMany({
+          where: { id: { in: categoryIds } },
+          select: { id: true, name: true, nameAr: true, slug: true },
+        })
+      : Promise.resolve([]),
+    sellerIds.length
+      ? prisma.sellerProfile.findMany({
+          where: { id: { in: sellerIds } },
+          select: { id: true, storeName: true, slug: true, verificationStatus: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const categoryLookup = new Map(categoryDetails.map((c) => [c.id, c]));
+  const sellerLookup = new Map(sellerDetails.map((s) => [s.id, s]));
+
   return {
-    conditions: conditions.map((c) => ({ condition: c.condition, count: c._count })),
+    conditions: conditions.map((c) => ({
+      condition: c.condition,
+      count: c._count,
+    })),
     priceRange: {
-      min: priceRange._min.price?.toNumber() || 0,
-      max: priceRange._max.price?.toNumber() || 0,
+      min: priceRange._min.price || 0,
+      max: priceRange._max.price || 0,
     },
-    categories: categories.map((c) => ({ categoryId: c.categoryId, count: c._count })),
+    categories: categories
+      .map((c) => ({
+        categoryId: c.categoryId,
+        count: c._count,
+        category: c.categoryId ? categoryLookup.get(c.categoryId) || null : null,
+      }))
+      .filter((c) => c.categoryId),
+    sellers: sellers.map((s) => ({
+      sellerId: s.sellerId,
+      count: s._count,
+      seller: sellerLookup.get(s.sellerId) || null,
+    })),
   };
 }

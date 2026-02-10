@@ -192,7 +192,7 @@ interface SearchStore {
     condition?: string;
     sort?: string;
   };
-  suggestions: { id: string; title: string; slug: string; image?: string }[];
+  suggestions: { id: string; title: string; type: 'product' | 'search'; slug?: string; query?: string; image?: string }[];
   isSearching: boolean;
   showAdvanced: boolean;
   setQuery: (query: string) => void;

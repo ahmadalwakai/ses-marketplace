@@ -196,16 +196,18 @@ export default function CartPage() {
                     </Text>
                   </HStack>
 
-                  <Button
-                    w="100%"
-                    size="lg"
-                    bg="black"
-                    color="white"
-                    _hover={{ bg: 'gray.800' }}
-                    fontSize="lg"
-                  >
-                    إتمام الشراء
-                  </Button>
+                  <Link href="/checkout">
+                    <Button
+                      w="100%"
+                      size="lg"
+                      bg="black"
+                      color="white"
+                      _hover={{ bg: 'gray.800' }}
+                      fontSize="lg"
+                    >
+                      إتمام الشراء
+                    </Button>
+                  </Link>
                   <HStack justify="space-between">
                     <Link href="/products">
                       <Button variant="outline" borderColor="black" color="black">

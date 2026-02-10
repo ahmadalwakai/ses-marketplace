@@ -350,8 +350,10 @@ Reply in JSON format:
   }
 }
 
-export default {
+const grokService = {
   moderateListing,
   optimizeListing,
   smartSearch,
 };
+
+export default grokService;

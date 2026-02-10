@@ -24,6 +24,7 @@ export async function GET(request: NextRequest, { params }: Props) {
         ratingAvg: true,
         ratingCount: true,
         verificationStatus: true,
+        verificationLevel: true,
         createdAt: true,
         user: {
           select: {
