@@ -369,50 +369,25 @@ export default function Navbar() {
                     🔴 SES Live
                   </Text>
                 </Link>
+                <Link href="/sellers">
+                  <Text color="black" _hover={{ textDecoration: 'underline' }}>
+                    🏬 المتاجر
+                  </Text>
+                </Link>
               </HStack>
 
               {/* Icons + Auth */}
               <HStack gap={2}>
-                {/* Saved (local wishlist for visitors) */}
-                <Link href="/wishlist">
+                {/* Saved / Wishlist (unified) */}
+                <Link href="/saved">
                   <Button
                     variant="ghost"
                     size="sm"
                     position="relative"
                     aria-label="المحفوظات"
                   >
-                    <Text fontSize="lg">🔖</Text>
-                    {savedItems.length > 0 && (
-                      <Box
-                        position="absolute"
-                        top="-1"
-                        right="-1"
-                        bg="black"
-                        color="white"
-                        fontSize="xs"
-                        w="18px"
-                        h="18px"
-                        borderRadius="full"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        {savedItems.length}
-                      </Box>
-                    )}
-                  </Button>
-                </Link>
-
-                {/* Wishlist */}
-                <Link href="/wishlist">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    position="relative"
-                    aria-label="المفضلة"
-                  >
                     <Text fontSize="lg">♡</Text>
-                    {wishlistItems.length > 0 && (
+                    {(savedItems.length + wishlistItems.length) > 0 && (
                       <Box
                         position="absolute"
                         top="-1"
@@ -427,7 +402,7 @@ export default function Navbar() {
                         alignItems="center"
                         justifyContent="center"
                       >
-                        {wishlistItems.length}
+                        {savedItems.length + wishlistItems.length}
                       </Box>
                     )}
                   </Button>
@@ -729,7 +704,7 @@ export default function Navbar() {
                         textAlign="center"
                       >
                         <Text color="black" fontWeight="medium">
-                          عرض كل النتائج لـ "{localQuery}"
+                          عرض كل النتائج لـ &ldquo;{localQuery}&rdquo;
                         </Text>
                       </Box>
                     </VStack>
@@ -800,25 +775,18 @@ export default function Navbar() {
                     <Text color="red.500" fontWeight="bold">🔴 SES Live</Text>
                   </Box>
                 </Link>
-                <Link href="/wishlist" onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/sellers" onClick={() => setMobileMenuOpen(false)}>
                   <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
-                    <HStack justify="space-between">
-                      <Text>🔖 المحفوظات</Text>
-                      {savedItems.length > 0 && (
-                        <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
-                          {savedItems.length}
-                        </Text>
-                      )}
-                    </HStack>
+                    <Text>🏬 المتاجر</Text>
                   </Box>
                 </Link>
-                <Link href="/wishlist" onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/saved" onClick={() => setMobileMenuOpen(false)}>
                   <Box p={3} _hover={{ bg: 'gray.100' }} borderRadius="md">
                     <HStack justify="space-between">
-                      <Text>♡ المفضلة</Text>
-                      {wishlistItems.length > 0 && (
+                      <Text>♡ المحفوظات</Text>
+                      {(savedItems.length + wishlistItems.length) > 0 && (
                         <Text bg="black" color="white" px={2} borderRadius="full" fontSize="sm">
-                          {wishlistItems.length}
+                          {savedItems.length + wishlistItems.length}
                         </Text>
                       )}
                     </HStack>

@@ -50,11 +50,16 @@ export async function middleware(request: NextRequest) {
     '/products',
     '/categories',
     '/stores',
+    '/sellers',
     '/search',
     '/about',
     '/contact',
     '/terms',
     '/privacy',
+    '/ses-live',
+    '/small-business',
+    '/login',
+    '/saved',
   ];
   
   const isPublicRoute = publicRoutes.some(
@@ -185,7 +190,12 @@ export const config = {
     '/products/:path*',
     '/categories/:path*',
     '/stores/:path*',
+    '/sellers/:path*',
     '/search/:path*',
+    '/ses-live/:path*',
+    '/small-business/:path*',
+    '/login',
+    '/saved/:path*',
     // API routes for rate limiting
     '/api/:path*',
   ],

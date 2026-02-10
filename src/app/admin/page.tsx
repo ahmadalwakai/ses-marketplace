@@ -18,7 +18,6 @@ import {
   Textarea,
   Stack,
   Table,
-  NumberInput,
 } from '@chakra-ui/react';
 
 interface Overview {
