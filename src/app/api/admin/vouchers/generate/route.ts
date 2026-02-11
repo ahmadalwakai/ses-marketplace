@@ -15,6 +15,8 @@ const generateSchema = z.object({
   currency: z.string().min(1).max(10).default('USD'),
   expiresAt: z.string().datetime().nullable().optional(),
   note: z.string().max(500).nullable().optional(),
+  batchName: z.string().max(200).nullable().optional(),
+  distributorName: z.string().max(200).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -27,10 +29,22 @@ export async function POST(req: NextRequest) {
     } catch {
       return apiError('Invalid JSON body', 'VALIDATION_ERROR', 400);
     }
-    const { count, value, currency, expiresAt, note } = generateSchema.parse(body);
+    const { count, value, currency, expiresAt, note, batchName, distributorName } = generateSchema.parse(body);
 
     // Use Prisma Decimal for precise monetary values
     const decimalValue = new Prisma.Decimal(value.toFixed(2));
+
+    // Auto-create batch if batchName provided
+    let batchId: string | null = null;
+    if (batchName?.trim()) {
+      const batch = await prisma.voucherBatch.create({
+        data: {
+          name: batchName.trim(),
+          createdByAdminId: admin.id,
+        },
+      });
+      batchId = batch.id;
+    }
 
     const rawCodes: string[] = [];
     const voucherData: Prisma.VoucherCardCreateManyInput[] = [];
@@ -80,6 +94,8 @@ export async function POST(req: NextRequest) {
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         createdByAdminId: admin.id,
         note: note ?? null,
+        batchId,
+        distributorName: distributorName?.trim() || null,
       });
     }
 

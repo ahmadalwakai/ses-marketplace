@@ -242,6 +242,7 @@ model User {
   walletTransactions WalletTransaction[]
   redeemedVouchers   VoucherCard[]    @relation("VoucherUsedBy")
   createdVouchers    VoucherCard[]    @relation("VoucherCreatedBy")
+  createdBatches     VoucherBatch[]   @relation("BatchCreatedBy")
 
   @@index([email])
   @@index([role])
@@ -264,14 +265,36 @@ model VoucherCard {
   usedByUserId     String?
   createdByAdminId String?
   note             String?
+  batchId          String?
+  printedAt        DateTime?
+  distributedAt    DateTime?
+  distributorName  String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  usedBy    User? @relation("VoucherUsedBy", fields: [usedByUserId], references: [id])
-  createdBy User? @relation("VoucherCreatedBy", fields: [createdByAdminId], references: [id])
+  usedBy    User?         @relation("VoucherUsedBy", fields: [usedByUserId], references: [id])
+  createdBy User?         @relation("VoucherCreatedBy", fields: [createdByAdminId], references: [id])
+  batch     VoucherBatch? @relation(fields: [batchId], references: [id])
 
   @@index([status])
   @@index([usedByUserId])
+  @@index([createdByAdminId])
+  @@index([batchId])
+}
+
+// ============================================
+// VOUCHER BATCH MODEL
+// ============================================
+
+model VoucherBatch {
+  id               String        @id @default(cuid())
+  name             String
+  createdByAdminId String
+  createdAt        DateTime      @default(now())
+
+  createdBy User          @relation("BatchCreatedBy", fields: [createdByAdminId], references: [id])
+  vouchers  VoucherCard[]
+
   @@index([createdByAdminId])
 }
 

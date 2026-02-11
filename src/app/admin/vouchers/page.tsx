@@ -29,6 +29,18 @@ interface GeneratedResult {
   warning: string;
 }
 
+interface GeneratedMeta {
+  batchName: string;
+  distributorName: string;
+}
+
+interface PrintConfig {
+  template: 'dark' | 'light' | 'antifraud';
+  layout: '1' | '2' | '4' | '8';
+  includeQr: '0' | '1';
+  language: 'en' | 'ar' | 'both';
+}
+
 interface VoucherItem {
   id: string;
   codeLast4: string;
@@ -39,6 +51,9 @@ interface VoucherItem {
   expiresAt: string | null;
   usedAt: string | null;
   note: string | null;
+  distributorName: string | null;
+  batchId: string | null;
+  batchName: string | null;
   usedByEmail: string | null;
   usedByName: string | null;
   createdByEmail: string | null;
@@ -107,6 +122,7 @@ export default function AdminVouchersPage() {
 
 function GenerateTab() {
   const toast = useAppToast();
+  const { data: session } = useSession();
   const [count, setCount] = useState('1');
   const [value, setValue] = useState('');
   const [currency, setCurrency] = useState('USD');
@@ -114,6 +130,16 @@ function GenerateTab() {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GeneratedResult | null>(null);
+  const [genMeta, setGenMeta] = useState<GeneratedMeta>({ batchName: '', distributorName: '' });
+  const [batchName, setBatchName] = useState('');
+  const [distributorName, setDistributorName] = useState('');
+  const [printConfig, setPrintConfig] = useState<PrintConfig>({
+    template: 'dark',
+    layout: '4',
+    includeQr: '1',
+    language: 'both',
+  });
+  const [printLoading, setPrintLoading] = useState(false);
 
   const handleGenerate = async () => {
     const countNum = parseInt(count, 10);
@@ -143,6 +169,12 @@ function GenerateTab() {
       if (note.trim()) {
         body.note = note.trim();
       }
+      if (batchName.trim()) {
+        body.batchName = batchName.trim();
+      }
+      if (distributorName.trim()) {
+        body.distributorName = distributorName.trim();
+      }
 
       const res = await fetch('/api/admin/vouchers/generate', {
         method: 'POST',
@@ -157,6 +189,7 @@ function GenerateTab() {
       }
 
       setResult(data.data);
+      setGenMeta({ batchName: batchName.trim(), distributorName: distributorName.trim() });
       toast.success(`تم إنشاء ${data.data.generated} قسيمة بنجاح`);
     } catch {
       toast.error('حدث خطأ في الاتصال');
@@ -167,6 +200,15 @@ function GenerateTab() {
 
   const handleDownloadCSV = () => {
     if (!result) return;
+    const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'ADMIN';
+    if (!isAdmin) {
+      toast.error('يتطلب صلاحية المسؤول لتصدير الأكواد الكاملة');
+      return;
+    }
+    const confirmed = window.confirm(
+      'تحذير: سيتم تصدير الأكواد الكاملة. هل أنت متأكد؟\n\nWarning: Full codes will be exported. Are you sure?'
+    );
+    if (!confirmed) return;
     // Escape CSV fields that might contain special characters
     const escapeCSV = (field: string) => {
       if (field.includes(',') || field.includes('"') || field.includes('\n')) {
@@ -175,8 +217,10 @@ function GenerateTab() {
       return field;
     };
     const csv = [
-      'Code,Value,Currency',
-      ...result.codes.map((c) => `${escapeCSV(c)},${escapeCSV(value)},${escapeCSV(currency)}`),
+      'Code,Value,Currency,Batch,Distributor',
+      ...result.codes.map((c) =>
+        `${escapeCSV(c)},${escapeCSV(value)},${escapeCSV(currency)},${escapeCSV(genMeta.batchName)},${escapeCSV(genMeta.distributorName)}`
+      ),
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -185,6 +229,73 @@ function GenerateTab() {
     a.download = `vouchers-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadMaskedCSV = () => {
+    if (!result) return;
+    const escapeCSV = (field: string) => {
+      if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+        return `"${field.replace(/"/g, '""')}"`;
+      }
+      return field;
+    };
+    const csv = [
+      'Last4,Value,Currency,Batch,Distributor',
+      ...result.codes.map((c) =>
+        `${escapeCSV('****' + c.slice(-4))},${escapeCSV(value)},${escapeCSV(currency)},${escapeCSV(genMeta.batchName)},${escapeCSV(genMeta.distributorName)}`
+      ),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vouchers-masked-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!result) return;
+    setPrintLoading(true);
+    try {
+      const params = new URLSearchParams({
+        template: printConfig.template,
+        layout: printConfig.layout,
+        includeQr: printConfig.includeQr,
+        language: printConfig.language,
+      });
+      const valueNum = parseFloat(value);
+      const body = {
+        codes: result.codes.map((code) => ({
+          code,
+          value: valueNum,
+          currency: currency || 'USD',
+        })),
+        batchName: genMeta.batchName || null,
+      };
+      const res = await fetch(`/api/admin/vouchers/print?${params.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error?.message ?? 'فشل في إنشاء PDF');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ses-vouchers-${printConfig.template}-${printConfig.layout}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('تم تنزيل ملف PDF');
+    } catch {
+      toast.error('حدث خطأ أثناء إنشاء PDF');
+    } finally {
+      setPrintLoading(false);
+    }
   };
 
   return (
@@ -251,6 +362,27 @@ function GenerateTab() {
             />
           </Box>
 
+          <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+            <Box>
+              <Text fontWeight="bold" mb={1}>اسم الدفعة (اختياري)</Text>
+              <Input
+                value={batchName}
+                onChange={(e) => setBatchName(e.target.value)}
+                placeholder="Damascus-Jan-2026-10USD"
+                maxLength={200}
+              />
+            </Box>
+            <Box>
+              <Text fontWeight="bold" mb={1}>اسم الموزع (اختياري)</Text>
+              <Input
+                value={distributorName}
+                onChange={(e) => setDistributorName(e.target.value)}
+                placeholder="اسم الموزع أو الوكيل"
+                maxLength={200}
+              />
+            </Box>
+          </SimpleGrid>
+
           <Button
             colorPalette="green"
             onClick={handleGenerate}
@@ -272,13 +404,18 @@ function GenerateTab() {
           p={6}
         >
           <VStack gap={4} align="stretch">
-            <HStack justifyContent="space-between" flexWrap="wrap">
+            <HStack justifyContent="space-between" flexWrap="wrap" gap={2}>
               <Heading size="md" color="orange.700">
                 ⚠️ الأكواد المُنشأة ({result.generated})
               </Heading>
-              <Button colorPalette="blue" size="sm" onClick={handleDownloadCSV}>
-                📥 تنزيل CSV
-              </Button>
+              <HStack gap={2}>
+                <Button colorPalette="teal" size="sm" onClick={handleDownloadMaskedCSV}>
+                  📥 CSV (مقنّع)
+                </Button>
+                <Button colorPalette="red" size="sm" onClick={handleDownloadCSV}>
+                  📥 CSV (كامل)
+                </Button>
+              </HStack>
             </HStack>
 
             <Box
@@ -316,6 +453,109 @@ function GenerateTab() {
           </VStack>
         </Box>
       )}
+
+      {/* Print PDF Panel — visible only when codes exist in memory */}
+      {result && (
+        <Box
+          bg="white"
+          borderWidth={2}
+          borderColor="black"
+          borderRadius="xl"
+          boxShadow="4px 4px 0 0 black"
+          p={6}
+        >
+          <VStack gap={4} align="stretch">
+            <Heading size="md">🖨️ طباعة بطاقات PDF</Heading>
+            <Text fontSize="sm" color="gray.600">
+              يتم تضمين الأكواد الكاملة في ملف PDF — متاحة فقط أثناء هذه الجلسة.
+            </Text>
+
+            <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+              <Box>
+                <Text fontWeight="bold" mb={1}>القالب</Text>
+                <HStack gap={2}>
+                  {(['dark', 'light', 'antifraud'] as const).map((t) => (
+                    <Button
+                      key={t}
+                      size="xs"
+                      variant={printConfig.template === t ? 'solid' : 'outline'}
+                      colorPalette="blue"
+                      onClick={() => setPrintConfig((p) => ({ ...p, template: t }))}
+                    >
+                      {t === 'dark' ? 'داكن' : t === 'light' ? 'فاتح' : 'مضاد للتزوير'}
+                    </Button>
+                  ))}
+                </HStack>
+              </Box>
+
+              <Box>
+                <Text fontWeight="bold" mb={1}>التخطيط (بطاقات/صفحة)</Text>
+                <HStack gap={2}>
+                  {(['1', '2', '4', '8'] as const).map((l) => (
+                    <Button
+                      key={l}
+                      size="xs"
+                      variant={printConfig.layout === l ? 'solid' : 'outline'}
+                      colorPalette="blue"
+                      onClick={() => setPrintConfig((p) => ({ ...p, layout: l }))}
+                    >
+                      {l}
+                    </Button>
+                  ))}
+                </HStack>
+              </Box>
+
+              <Box>
+                <Text fontWeight="bold" mb={1}>رمز QR</Text>
+                <HStack gap={2}>
+                  <Button
+                    size="xs"
+                    variant={printConfig.includeQr === '1' ? 'solid' : 'outline'}
+                    colorPalette="blue"
+                    onClick={() => setPrintConfig((p) => ({ ...p, includeQr: '1' }))}
+                  >
+                    تضمين
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant={printConfig.includeQr === '0' ? 'solid' : 'outline'}
+                    colorPalette="blue"
+                    onClick={() => setPrintConfig((p) => ({ ...p, includeQr: '0' }))}
+                  >
+                    بدون
+                  </Button>
+                </HStack>
+              </Box>
+
+              <Box>
+                <Text fontWeight="bold" mb={1}>اللغة</Text>
+                <HStack gap={2}>
+                  {(['both', 'ar', 'en'] as const).map((lang) => (
+                    <Button
+                      key={lang}
+                      size="xs"
+                      variant={printConfig.language === lang ? 'solid' : 'outline'}
+                      colorPalette="blue"
+                      onClick={() => setPrintConfig((p) => ({ ...p, language: lang }))}
+                    >
+                      {lang === 'both' ? 'كلاهما' : lang === 'ar' ? 'عربي' : 'English'}
+                    </Button>
+                  ))}
+                </HStack>
+              </Box>
+            </SimpleGrid>
+
+            <Button
+              colorPalette="purple"
+              onClick={handleDownloadPDF}
+              disabled={printLoading}
+              size="lg"
+            >
+              {printLoading ? <Spinner size="sm" /> : '📄 تنزيل PDF للطباعة'}
+            </Button>
+          </VStack>
+        </Box>
+      )}
     </VStack>
   );
 }
@@ -330,7 +570,9 @@ function ListTab() {
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [batchFilter, setBatchFilter] = useState('');
   const [page, setPage] = useState(0);
+  const [printActiveLoading, setPrintActiveLoading] = useState(false);
   const PAGE_SIZE = 20;
 
   const fetchVouchers = useCallback(async () => {
@@ -338,6 +580,7 @@ function ListTab() {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
+      if (batchFilter) params.set('batchId', batchFilter);
       params.set('take', String(PAGE_SIZE));
       params.set('skip', String(page * PAGE_SIZE));
 
@@ -354,7 +597,7 @@ function ListTab() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, page, toast]);
+  }, [statusFilter, batchFilter, page, toast]);
 
   useEffect(() => {
     fetchVouchers();
@@ -389,23 +632,161 @@ function ListTab() {
     }
   };
 
+  const handlePrintActive = async () => {
+    setPrintActiveLoading(true);
+    try {
+      const params = new URLSearchParams({
+        status: 'ACTIVE',
+        take: '200',
+        template: 'dark',
+        layout: '8',
+        includeQr: '1',
+        language: 'both',
+      });
+      const res = await fetch(`/api/admin/vouchers/print?${params.toString()}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error?.message ?? 'فشل في إنشاء PDF');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ses-active-vouchers-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('تم تنزيل ملف PDF للقسائم النشطة');
+    } catch {
+      toast.error('حدث خطأ أثناء إنشاء PDF');
+    } finally {
+      setPrintActiveLoading(false);
+    }
+  };
+
+  const handleDisableBatch = async (batchId: string) => {
+    try {
+      const res = await fetch('/api/admin/vouchers/disable-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        toast.error(data.error?.message ?? 'فشل في تعطيل الدفعة');
+        return;
+      }
+      toast.success(`تم تعطيل ${data.data.disabledCount} قسيمة في الدفعة`);
+      fetchVouchers();
+    } catch {
+      toast.error('حدث خطأ في الاتصال');
+    }
+  };
+
+  const handleExportDistributorCSV = () => {
+    const escapeCSV = (field: string) => {
+      if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+        return `"${field.replace(/"/g, '""')}"`;
+      }
+      return field;
+    };
+    const csv = [
+      'Last4,Value,Currency,Batch,Distributor,Status',
+      ...vouchers.map((v) =>
+        [
+          escapeCSV(`****${v.codeLast4}`),
+          String(v.value),
+          escapeCSV(v.currency),
+          escapeCSV(v.batchName ?? ''),
+          escapeCSV(v.distributorName ?? ''),
+          v.status,
+        ].join(',')
+      ),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vouchers-distributor-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Collect unique batches from current vouchers for filter
+  const batchOptions = vouchers.reduce<{ id: string; name: string }[]>((acc, v) => {
+    if (v.batchId && v.batchName && !acc.find((b) => b.id === v.batchId)) {
+      acc.push({ id: v.batchId, name: v.batchName });
+    }
+    return acc;
+  }, []);
+
   return (
     <VStack gap={4} align="stretch">
-      {/* Filters */}
-      <HStack gap={2} flexWrap="wrap">
-        <Text fontWeight="bold">حالة:</Text>
-        {['', 'ACTIVE', 'USED', 'DISABLED', 'EXPIRED'].map((s) => (
+      {/* Filters + Print Active */}
+      <HStack gap={2} flexWrap="wrap" justifyContent="space-between">
+        <HStack gap={2} flexWrap="wrap">
+          <Text fontWeight="bold">حالة:</Text>
+          {['', 'ACTIVE', 'USED', 'DISABLED', 'EXPIRED'].map((s) => (
+            <Button
+              key={s}
+              size="xs"
+              variant={statusFilter === s ? 'solid' : 'outline'}
+              colorPalette="blue"
+              onClick={() => { setStatusFilter(s); setPage(0); }}
+            >
+              {s || 'الكل'}
+            </Button>
+          ))}
+        </HStack>
+        <HStack gap={2} flexWrap="wrap">
+          {batchFilter && (
+            <Button
+              size="xs"
+              variant="outline"
+              colorPalette="orange"
+              onClick={() => { setBatchFilter(''); setPage(0); }}
+            >
+              ✕ إلغاء فلتر الدفعة
+            </Button>
+          )}
           <Button
-            key={s}
-            size="xs"
-            variant={statusFilter === s ? 'solid' : 'outline'}
-            colorPalette="blue"
-            onClick={() => { setStatusFilter(s); setPage(0); }}
+            size="sm"
+            colorPalette="teal"
+            variant="outline"
+            onClick={handleExportDistributorCSV}
+            disabled={vouchers.length === 0}
           >
-            {s || 'الكل'}
+            📥 تصدير CSV الموزع (مقنّع)
           </Button>
-        ))}
+          <Button
+            size="sm"
+            colorPalette="purple"
+            variant="outline"
+            onClick={handlePrintActive}
+            disabled={printActiveLoading}
+          >
+            {printActiveLoading ? <Spinner size="xs" /> : '🖨️ طباعة القسائم النشطة'}
+          </Button>
+        </HStack>
       </HStack>
+
+      {/* Batch filter chips */}
+      {batchOptions.length > 0 && !batchFilter && (
+        <HStack gap={2} flexWrap="wrap">
+          <Text fontWeight="bold" fontSize="sm">دفعة:</Text>
+          {batchOptions.map((b) => (
+            <Button
+              key={b.id}
+              size="xs"
+              variant="outline"
+              colorPalette="orange"
+              onClick={() => { setBatchFilter(b.id); setPage(0); }}
+            >
+              {b.name}
+            </Button>
+          ))}
+        </HStack>
+      )}
 
       {/* Table */}
       <Box
@@ -428,9 +809,9 @@ function ListTab() {
                 <Table.ColumnHeader>القيمة</Table.ColumnHeader>
                 <Table.ColumnHeader>العملة</Table.ColumnHeader>
                 <Table.ColumnHeader>الحالة</Table.ColumnHeader>
+                <Table.ColumnHeader>الدفعة</Table.ColumnHeader>
+                <Table.ColumnHeader>الموزع</Table.ColumnHeader>
                 <Table.ColumnHeader>تاريخ الإنشاء</Table.ColumnHeader>
-                <Table.ColumnHeader>تاريخ الانتهاء</Table.ColumnHeader>
-                <Table.ColumnHeader>تاريخ الاستخدام</Table.ColumnHeader>
                 <Table.ColumnHeader>المستخدم</Table.ColumnHeader>
                 <Table.ColumnHeader>إجراء</Table.ColumnHeader>
               </Table.Row>
@@ -456,28 +837,48 @@ function ListTab() {
                       </Badge>
                     </Table.Cell>
                     <Table.Cell fontSize="xs">
+                      {v.batchName ? (
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => { setBatchFilter(v.batchId ?? ''); setPage(0); }}
+                        >
+                          {v.batchName}
+                        </Button>
+                      ) : '—'}
+                    </Table.Cell>
+                    <Table.Cell fontSize="xs">
+                      {v.distributorName ?? '—'}
+                    </Table.Cell>
+                    <Table.Cell fontSize="xs">
                       {new Date(v.createdAt).toLocaleDateString('ar')}
-                    </Table.Cell>
-                    <Table.Cell fontSize="xs">
-                      {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString('ar') : '—'}
-                    </Table.Cell>
-                    <Table.Cell fontSize="xs">
-                      {v.usedAt ? new Date(v.usedAt).toLocaleDateString('ar') : '—'}
                     </Table.Cell>
                     <Table.Cell fontSize="xs">
                       {v.usedByEmail ?? '—'}
                     </Table.Cell>
                     <Table.Cell>
-                      {v.status === 'ACTIVE' && (
-                        <Button
-                          size="xs"
-                          colorPalette="red"
-                          variant="outline"
-                          onClick={() => handleDisable(v.id)}
-                        >
-                          تعطيل
-                        </Button>
-                      )}
+                      <HStack gap={1}>
+                        {v.status === 'ACTIVE' && (
+                          <Button
+                            size="xs"
+                            colorPalette="red"
+                            variant="outline"
+                            onClick={() => handleDisable(v.id)}
+                          >
+                            تعطيل
+                          </Button>
+                        )}
+                        {v.status === 'ACTIVE' && v.batchId && (
+                          <Button
+                            size="xs"
+                            colorPalette="orange"
+                            variant="outline"
+                            onClick={() => handleDisableBatch(v.batchId!)}
+                          >
+                            تعطيل الدفعة
+                          </Button>
+                        )}
+                      </HStack>
                     </Table.Cell>
                   </Table.Row>
                 ))
