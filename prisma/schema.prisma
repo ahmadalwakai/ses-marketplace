@@ -187,38 +187,112 @@ model InviteToken {
 }
 
 // ============================================
+// VOUCHER / WALLET ENUMS
+// ============================================
+
+enum VoucherStatus {
+  ACTIVE
+  USED
+  DISABLED
+  EXPIRED
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTransactionReason {
+  VOUCHER_REDEEM
+  ORDER_PAYMENT
+  MANUAL_ADJUSTMENT
+}
+
+// ============================================
 // USER MODELS
 // ============================================
 
 model User {
-  id            String     @id @default(cuid())
-  email         String     @unique
-  emailVerified DateTime?
-  name          String?
-  password      String?
-  image         String?
-  role          Role       @default(CUSTOMER)
-  status        UserStatus @default(PENDING)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id             String     @id @default(cuid())
+  email          String     @unique
+  emailVerified  DateTime?
+  name           String?
+  password       String?
+  image          String?
+  role           Role       @default(CUSTOMER)
+  status         UserStatus @default(PENDING)
+  walletBalance  Decimal    @default(0) @db.Decimal(12, 2)
+  walletCurrency String     @default("USD")
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
-  accounts        Account[]
-  sessions        Session[]
-  sellerProfile   SellerProfile?
-  addresses       Address[]
-  orders          Order[]          @relation("CustomerOrders")
-  reviews         Review[]
-  disputes        Dispute[]        @relation("DisputeOpener")
-  disputeMessages DisputeMessage[]
-  reports         Report[]
-  auditLogs       AuditLog[]
-  aiLogs          AiLog[]
-  uploadSessions  UploadSession[]
-  notifications   Notification[]
+  accounts           Account[]
+  sessions           Session[]
+  sellerProfile      SellerProfile?
+  addresses          Address[]
+  orders             Order[]          @relation("CustomerOrders")
+  reviews            Review[]
+  disputes           Dispute[]        @relation("DisputeOpener")
+  disputeMessages    DisputeMessage[]
+  reports            Report[]
+  auditLogs          AuditLog[]
+  aiLogs             AiLog[]
+  uploadSessions     UploadSession[]
+  notifications      Notification[]
+  walletTransactions WalletTransaction[]
+  redeemedVouchers   VoucherCard[]    @relation("VoucherUsedBy")
+  createdVouchers    VoucherCard[]    @relation("VoucherCreatedBy")
 
   @@index([email])
   @@index([role])
   @@index([status])
+}
+
+// ============================================
+// VOUCHER CARD MODEL
+// ============================================
+
+model VoucherCard {
+  id               String        @id @default(cuid())
+  codeHash         String        @unique
+  codeLast4        String
+  value            Decimal       @db.Decimal(12, 2)
+  currency         String        @default("USD")
+  status           VoucherStatus @default(ACTIVE)
+  expiresAt        DateTime?
+  usedAt           DateTime?
+  usedByUserId     String?
+  createdByAdminId String?
+  note             String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  usedBy    User? @relation("VoucherUsedBy", fields: [usedByUserId], references: [id])
+  createdBy User? @relation("VoucherCreatedBy", fields: [createdByAdminId], references: [id])
+
+  @@index([status])
+  @@index([usedByUserId])
+  @@index([createdByAdminId])
+}
+
+// ============================================
+// WALLET TRANSACTION MODEL
+// ============================================
+
+model WalletTransaction {
+  id          String                  @id @default(cuid())
+  userId      String
+  type        WalletTransactionType
+  amount      Decimal                 @db.Decimal(12, 2)
+  currency    String
+  reason      WalletTransactionReason
+  referenceId String?
+  createdAt   DateTime                @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([referenceId])
 }
 
 model SellerProfile {

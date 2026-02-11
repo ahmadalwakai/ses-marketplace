@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Providers } from './providers';
-import Navbar from '@/components/Navbar';
+import ConditionalNavbar from '@/components/ConditionalNavbar';
 import CookieConsent from '@/components/CookieConsent';
 import './globals.css';
 
@@ -26,7 +26,7 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
-          <Navbar />
+          <ConditionalNavbar />
           {children}
           <CookieConsent />
         </Providers>
