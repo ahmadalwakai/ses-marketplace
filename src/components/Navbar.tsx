@@ -121,7 +121,7 @@ export default function Navbar() {
         }
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && data.success) {
+        if (!cancelled && data.ok) {
           setNotifications(data.data.notifications);
           setUnreadCount(data.data.unreadCount);
         }

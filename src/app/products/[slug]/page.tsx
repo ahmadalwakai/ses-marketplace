@@ -114,18 +114,24 @@ async function fetchProductDetail(slug: string) {
     return null;
   }
 
-  const ratingDistribution = await prisma.review.groupBy({
-    by: ['rating'],
-    where: {
-      productId: product.id,
-      status: 'APPROVED',
-    },
-    _count: true,
-  });
+  let ratingDistribution: { rating: number; _count: number }[] = [];
+  try {
+    const grouped = await prisma.review.groupBy({
+      by: ['rating'],
+      where: {
+        productId: product.id,
+        status: 'APPROVED',
+      },
+      _count: true,
+    });
+    ratingDistribution = grouped as unknown as { rating: number; _count: number }[];
+  } catch {
+    // Gracefully handle groupBy failure
+  }
 
   const ratingSummary = {
-    average: product.ratingAvg,
-    total: product._count.reviews,
+    average: product.ratingAvg ?? 0,
+    total: product._count?.reviews ?? 0,
     distribution: {
       1: 0,
       2: 0,
@@ -146,7 +152,7 @@ async function fetchProductDetail(slug: string) {
     price: Number(product.price),
     quantity: product.quantity,
     condition: product.condition,
-    images: product.images.map((image) => ({
+    images: (product.images || []).map((image) => ({
       id: image.id,
       url: image.url,
       alt: image.alt,
@@ -168,14 +174,14 @@ async function fetchProductDetail(slug: string) {
       verificationStatus: product.seller.verificationStatus,
       verificationLevel: product.seller.verificationLevel || undefined,
     },
-    ratingAvg: product.ratingAvg,
-    ratingCount: product.ratingCount,
+    ratingAvg: product.ratingAvg ?? 0,
+    ratingCount: product.ratingCount ?? 0,
     ratingSummary,
-    reviews: product.reviews.map((review) => ({
+    reviews: (product.reviews || []).map((review) => ({
       id: review.id,
       rating: review.rating,
       comment: review.comment || '',
-      customer: { name: review.customer.name || 'مستخدم' },
+      customer: { name: review.customer?.name || 'مستخدم' },
       createdAt: review.createdAt.toISOString(),
     })),
   };
@@ -186,23 +192,39 @@ async function fetchProductDetail(slug: string) {
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> }
 ): Promise<Metadata> {
-  const { slug } = await params;
-  const product = await fetchProductSeo(slug);
-  if (!product || product.status !== 'ACTIVE') {
+  try {
+    const { slug } = await params;
+    const product = await fetchProductSeo(slug);
+    if (!product || product.status !== 'ACTIVE') {
+      return buildMetadata({
+        title: 'المنتج غير موجود',
+        description: 'المنتج غير متاح حالياً.',
+      });
+    }
+
+    return buildMetadata(generateProductMetadata(product));
+  } catch (err) {
+    console.error('generateMetadata error:', err);
     return buildMetadata({
       title: 'المنتج غير موجود',
       description: 'المنتج غير متاح حالياً.',
     });
   }
-
-  return buildMetadata(generateProductMetadata(product));
 }
 
 export default async function ProductDetailPage(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const result = await fetchProductDetail(slug);
+
+  let result: Awaited<ReturnType<typeof fetchProductDetail>>;
+  try {
+    result = await fetchProductDetail(slug);
+  } catch (err) {
+    console.error('ProductDetailPage fetch error:', err);
+    notFound();
+  }
+
   if (!result) {
     notFound();
   }
